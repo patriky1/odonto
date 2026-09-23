@@ -47,7 +47,7 @@ exports.desbloquearFinanceiro = (req, res) => {
 
     const hash = garantirSenhaFinanceira();
     if (!bcrypt.compareSync(senha, hash)) {
-      return res.status(401).json({ erro: 'Senha incorreta', error: 'Senha incorreta' });
+      return res.status(403).json({ erro: 'Senha incorreta', error: 'Senha incorreta' }); // 403, não 401: o login continua válido
     }
 
     res.json({

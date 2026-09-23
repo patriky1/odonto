@@ -15,6 +15,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Rotas em que 401 quer dizer "senha incorreta", e NÃO "sessão expirada"
+const ROTAS_SENHA = [
+  '/auth/login',
+  '/auth/esqueci-senha',
+  '/auth/redefinir-senha',
+  '/configuracoes/financeiro/desbloquear',
+];
+
 // Response interceptor - trata erros globalmente
 api.interceptors.response.use(
   (response) => response,
@@ -29,10 +37,20 @@ api.interceptors.response.use(
         ? 'O servidor demorou para responder. Tente novamente.'
         : 'Erro de conexão com o servidor');
 
-    if (error.response?.status === 401) {
+    // 401 = sessão inválida/expirada -> volta para o login.
+    // Exceção: rotas onde 401 significa só "senha digitada errada" (login e
+    // senha do financeiro). Nelas o usuário continua onde está e vê o erro.
+    const url = error.config?.url || '';
+    const rotaDeSenha = ROTAS_SENHA.some((r) => url.startsWith(r));
+
+    if (error.response?.status === 401 && !rotaDeSenha) {
       localStorage.removeItem('odonto_token');
       localStorage.removeItem('odonto_usuario');
-      window.location.href = '/login';
+      // Evita recarregar a tela de login (apagaria o que foi digitado)
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+      error.mensagem = msg;
       return Promise.reject(error);
     }
 
