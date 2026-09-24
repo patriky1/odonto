@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const { salvarDataUrl, removerArquivo } = require('./uploadController');
+const { comImagens } = require('./tratamentosController');
 
 exports.listar = (req, res) => {
   const { busca = '', pagina = 1, limite = 20, cidadeAtendimento } = req.query;
@@ -20,7 +21,7 @@ exports.buscarPorId = (req, res) => {
   if (!p) return res.status(404).json({ erro: 'Paciente não encontrado' });
   p.ativo = Boolean(p.ativo);
   p.agendamentos = db.prepare("SELECT a.*, d.nome as dentistaNome, pr.nome as procedimentoNome FROM agendamentos a LEFT JOIN dentistas d ON a.dentistaId = d.id LEFT JOIN procedimentos pr ON a.procedimentoId = pr.id WHERE a.pacienteId = ? ORDER BY a.data DESC, a.horaInicio DESC LIMIT 10").all(p.id);
-  p.tratamentos = db.prepare('SELECT * FROM tratamentos WHERE pacienteId = ? ORDER BY createdAt DESC').all(p.id);
+  p.tratamentos = db.prepare('SELECT * FROM tratamentos WHERE pacienteId = ? ORDER BY createdAt DESC').all(p.id).map(comImagens);
   p.pagamentos = db.prepare('SELECT * FROM pagamentos WHERE pacienteId = ? ORDER BY createdAt DESC LIMIT 10').all(p.id);
 
   // Anamnese odontológica e procedimentos ortodônticos

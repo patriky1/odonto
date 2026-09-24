@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, User, Phone, Mail, MapPin, Calendar, FileText, DollarSign, Activity, Smile,
-  ClipboardList, Braces, ExternalLink, AlertTriangle, Building2, Camera, Receipt, FileSignature, NotebookPen } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, DollarSign, Activity, Smile, Pencil, MessageCircle, UserCheck,
+  ClipboardList, Braces, ExternalLink, AlertTriangle, Link2, Save, X, Building2, Camera, Receipt, FileSignature, NotebookPen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import FotoPacienteModal, { AvatarPaciente } from '../../components/common/FotoPaciente';
@@ -11,7 +11,81 @@ import ReciboModal from '../../components/common/ReciboModal';
 import TermosPanel from './TermosPanel';
 import RegistradoPor from '../../components/common/RegistradoPor';
 import ProntuarioAutomatico from '../../components/prontuario/ProntuarioAutomatico';
+import Modal from '../../components/common/Modal';
+import PacienteForm from './PacienteForm';
+import OrcamentoPanel from './OrcamentoPanel';
+import TratamentosPanel from './TratamentosPanel';
 import { formatDate, formatCPF, calcularIdade, formatCurrency, getStatusAgendamento, getStatusPagamento } from '../../utils/formatters';
+
+/**
+ * Link do paciente no CFaz (antigo "iDoc", coluna linkIdoc).
+ * Fica sempre visível no perfil: com link, abre a página; sem link,
+ * pede para inserir ali mesmo.
+ */
+function CampoCFaz({ paciente, onSalvo }) {
+  const link = paciente.linkIdoc || '';
+  const [editando, setEditando] = useState(!link);
+  const [valor, setValor] = useState(link);
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => { setValor(link); setEditando(!link); }, [link]);
+
+  const salvar = async (e) => {
+    e.preventDefault();
+    let url = valor.trim();
+    if (!url) return toast.error('Cole o link do paciente no CFaz');
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    setSalvando(true);
+    try {
+      await api.put(`/pacientes/${paciente.id}`, { linkIdoc: url });
+      toast.success('Link do CFaz salvo');
+      onSalvo();
+    } catch { /* mensagem já exibida pelo interceptor */ } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (!editando) {
+    return (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+        <a href={link} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
+          <ExternalLink size={14} /> Abrir no CFaz
+        </a>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditando(true)} title="Trocar o link do CFaz">
+          <Pencil size={13} /> Trocar link
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={salvar} style={{
+      marginTop: 10, padding: '10px 12px', borderRadius: 8,
+      border: `1px dashed ${link ? 'var(--border)' : 'var(--warning)'}`, background: link ? 'var(--bg)' : '#fffbeb',
+    }}>
+      <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <Link2 size={14} /> CFaz
+        {!link && <span className="text-xs" style={{ color: '#b45309', fontWeight: 500 }}>— nenhum link cadastrado, insira o link do paciente</span>}
+      </label>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <input type="text" inputMode="url" className="form-control" style={{ flex: '1 1 220px', padding: '6px 10px', fontSize: 13 }}
+          placeholder="https://... (link do paciente no CFaz)" value={valor} onChange={(e) => setValor(e.target.value)}
+          autoFocus={Boolean(link)} />
+        <button type="submit" className="btn btn-primary btn-sm" disabled={salvando}>
+          <Save size={13} /> {salvando ? 'Salvando...' : 'Salvar link'}
+        </button>
+        {link && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setValor(link); setEditando(false); }}>
+            <X size={13} /> Cancelar
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+const ABA_PADRAO = 'orcamento';
+const ABAS = ['orcamento', 'prontuario', 'termos', 'anamnese', 'ortodontia', 'agenda', 'tratamentos', 'financeiro'];
 
 export default function PacienteDetalhes() {
   const { id } = useParams();
@@ -19,8 +93,10 @@ export default function PacienteDetalhes() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [paciente, setPaciente] = useState(null);
   // A aba fica na URL (?aba=termos) para poder compartilhar/voltar direto nela
-  const aba = searchParams.get('aba') || 'info';
-  const setAba = (nova) => setSearchParams(nova === 'info' ? {} : { aba: nova }, { replace: true });
+  const abaUrl = searchParams.get('aba');
+  const aba = ABAS.includes(abaUrl) ? abaUrl : ABA_PADRAO;
+  const setAba = (nova) => setSearchParams(nova === ABA_PADRAO ? {} : { aba: nova }, { replace: true });
+  const [editandoPerfil, setEditandoPerfil] = useState(false);
   const [termosPendentes, setTermosPendentes] = useState(0);
   const [loading, setLoading] = useState(true);
   const [alertasAnamnese, setAlertasAnamnese] = useState([]);
@@ -34,8 +110,19 @@ export default function PacienteDetalhes() {
     toast.success(foto ? 'Foto atualizada' : 'Foto removida');
   };
 
+  const carregarPaciente = () => api.get(`/pacientes/${id}`).then(r => setPaciente(r.data)).catch(() => {});
+
+  const salvarPerfil = async (dados) => {
+    try {
+      await api.put(`/pacientes/${id}`, dados);
+      toast.success('Perfil atualizado');
+      setEditandoPerfil(false);
+      carregarPaciente();
+    } catch { /* mensagem já exibida pelo interceptor */ }
+  };
+
   useEffect(() => {
-    api.get(`/pacientes/${id}`).then(r => setPaciente(r.data)).catch(() => {}).finally(() => setLoading(false));
+    carregarPaciente().finally(() => setLoading(false));
     // Alertas clínicos aparecem no topo da ficha, em qualquer aba
     api.get(`/anamnese/paciente/${id}`).then(r => setAlertasAnamnese(r.data.alertas || [])).catch(() => {});
     api.get('/dentistas').then(r => setDentistas(r.data)).catch(() => {});
@@ -46,11 +133,11 @@ export default function PacienteDetalhes() {
   if (!paciente) return <div className="empty-state"><h3>Paciente não encontrado</h3></div>;
 
   const aba_items = [
-    { id: 'info', label: 'Dados', icon: User },
+    { id: 'anamnese', label: 'Anamnese', icon: ClipboardList },
+    { id: 'orcamento', label: 'Orçamento', icon: Smile },
+    { id: 'ortodontia', label: 'Ortodontia', icon: Braces },
     { id: 'prontuario', label: 'Prontuário', icon: NotebookPen },
     { id: 'termos', label: termosPendentes ? `Termos (${termosPendentes} pendente${termosPendentes > 1 ? 's' : ''})` : 'Termos', icon: FileSignature },
-    { id: 'anamnese', label: 'Anamnese', icon: ClipboardList },
-    { id: 'ortodontia', label: 'Ortodontia', icon: Braces },
     { id: 'agenda', label: 'Histórico', icon: Calendar },
     { id: 'tratamentos', label: 'Tratamentos', icon: Activity },
     { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
@@ -65,11 +152,11 @@ export default function PacienteDetalhes() {
           <p className="text-muted text-sm">Paciente desde {formatDate(paciente.createdAt)}</p>
         </div>
         <div className="perfil-topo-acoes">
+          <button className="btn btn-secondary" onClick={() => setEditandoPerfil(true)}>
+            <Pencil size={16} /> Editar perfil
+          </button>
           <button className="btn btn-secondary" onClick={() => setReciboModal({})}>
             <Receipt size={16} /> Emitir recibo
-          </button>
-          <button className="btn btn-secondary" onClick={() => navigate(`/odontograma?paciente=${paciente.id}`)}>
-            <Smile size={16} /> Odontograma
           </button>
         </div>
       </div>
@@ -109,17 +196,29 @@ export default function PacienteDetalhes() {
             {paciente.dataNascimento && <span className="text-sm text-muted"><strong>Idade:</strong> {calcularIdade(paciente.dataNascimento)} anos</span>}
             {paciente.sexo && <span className="text-sm text-muted"><strong>Sexo:</strong> {paciente.sexo === 'M' ? 'Masculino' : paciente.sexo === 'F' ? 'Feminino' : 'Outro'}</span>}
             {paciente.telefone && <span className="text-sm text-muted"><Phone size={12} style={{ display: 'inline', marginRight: 4 }} />{paciente.telefone}</span>}
+            {paciente.whatsapp && paciente.whatsapp !== paciente.telefone && (
+              <span className="text-sm text-muted"><MessageCircle size={12} style={{ display: 'inline', marginRight: 4 }} />{paciente.whatsapp}</span>
+            )}
             {paciente.email && <span className="text-sm text-muted"><Mail size={12} style={{ display: 'inline', marginRight: 4 }} />{paciente.email}</span>}
+            {(paciente.endereco || paciente.cidade || paciente.cep) && (
+              <span className="text-sm text-muted">
+                <MapPin size={12} style={{ display: 'inline', marginRight: 4 }} />
+                {[paciente.endereco, paciente.cidade && `${paciente.cidade}${paciente.estado ? `/${paciente.estado}` : ''}`, paciente.cep && `CEP ${paciente.cep}`].filter(Boolean).join(' — ')}
+              </span>
+            )}
+            {paciente.responsavel && (
+              <span className="text-sm text-muted"><UserCheck size={12} style={{ display: 'inline', marginRight: 4 }} /><strong>Responsável:</strong> {paciente.responsavel}</span>
+            )}
             {paciente.cidadeAtendimento && (
               <span className="badge badge-info"><Building2 size={12} /> Atendido em {paciente.cidadeAtendimento}</span>
             )}
           </div>
-          {paciente.linkIdoc && (
-            <a href={paciente.linkIdoc} target="_blank" rel="noopener noreferrer"
-              className="btn btn-secondary btn-sm" style={{ marginTop: 10 }}>
-              <ExternalLink size={14} /> Abrir página no iDoc
-            </a>
+          {paciente.observacoes && (
+            <p className="text-sm" style={{ marginTop: 10, padding: '8px 12px', background: 'var(--bg)', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+              <strong>Observações:</strong> {paciente.observacoes}
+            </p>
           )}
+          <CampoCFaz paciente={paciente} onSalvo={carregarPaciente} />
         </div>
       </div>
 
@@ -131,39 +230,7 @@ export default function PacienteDetalhes() {
         ))}
       </div>
 
-      {aba === 'info' && (
-        <div className="card">
-          <div className="form-row">
-            {[
-              { label: 'Endereço', value: paciente.endereco },
-              { label: 'Cidade/UF', value: paciente.cidade && `${paciente.cidade}/${paciente.estado}` },
-              { label: 'CEP', value: paciente.cep },
-              { label: 'WhatsApp', value: paciente.whatsapp },
-              { label: 'Responsável', value: paciente.responsavel },
-              { label: 'Cidade de atendimento', value: paciente.cidadeAtendimento },
-              { label: 'Link do iDoc', value: paciente.linkIdoc, link: true },
-            ].map(({ label, value, link }) => value && (
-              <div key={label}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>{label}</p>
-                {link ? (
-                  <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary truncate"
-                    style={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 260 }}>
-                    <ExternalLink size={13} /> Abrir no iDoc
-                  </a>
-                ) : (
-                  <p style={{ fontWeight: 500 }}>{value}</p>
-                )}
-              </div>
-            ))}
-          </div>
-          {paciente.observacoes && (
-            <div style={{ marginTop: 16, padding: 16, background: 'var(--bg)', borderRadius: 8 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>Observações</p>
-              <p style={{ fontSize: 14 }}>{paciente.observacoes}</p>
-            </div>
-          )}
-        </div>
-      )}
+      {aba === 'orcamento' && <OrcamentoPanel pacienteId={id} />}
 
       {aba === 'prontuario' && <ProntuarioAutomatico pacienteId={id} />}
 
@@ -215,28 +282,7 @@ export default function PacienteDetalhes() {
         </div>
       )}
 
-      {aba === 'tratamentos' && (
-        <div className="card">
-          <h3 className="card-title mb-4">Tratamentos</h3>
-          {(paciente.tratamentos || []).length === 0 ? <div className="empty-state"><p>Nenhum tratamento registrado</p></div> : (
-            paciente.tratamentos.map(t => (
-              <div key={t.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-                  <div>
-                    <p style={{ fontWeight: 600 }}>{t.nome}</p>
-                    {t.descricao && <p className="text-sm text-muted">{t.descricao}</p>}
-                    <p className="text-sm text-muted mt-1">{t.sessoesRealizadas}/{t.sessoes} sessões · {formatCurrency(t.valor)}</p>
-                    <RegistradoPor registro={t} />
-                  </div>
-                  <span className={`badge ${t.status === 'concluido' ? 'badge-success' : t.status === 'em_andamento' ? 'badge-warning' : 'badge-gray'}`}>
-                    {t.status.replace('_', ' ')}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {aba === 'tratamentos' && <TratamentosPanel pacienteId={id} />}
 
       {aba === 'financeiro' && (
         <div className="card">
@@ -267,6 +313,17 @@ export default function PacienteDetalhes() {
           </div>
         </div>
       )}
+
+      <Modal open={editandoPerfil} onClose={() => setEditandoPerfil(false)} title="Editar perfil do paciente" size="lg"
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setEditandoPerfil(false)}>Cancelar</button>
+            <button className="btn btn-primary" form="form-paciente" type="submit">Salvar</button>
+          </>
+        }
+      >
+        {editandoPerfil && <PacienteForm paciente={paciente} onSubmit={salvarPerfil} />}
+      </Modal>
 
       <FotoPacienteModal aberto={fotoAberta} onFechar={() => setFotoAberta(false)} fotoAtual={paciente.foto} onSalvar={salvarFoto} />
 

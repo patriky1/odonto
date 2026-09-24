@@ -10,6 +10,7 @@ const TIPOS = [
   { value: '', label: 'Todos os registros' },
   { value: 'agendamento', label: 'Agenda' },
   { value: 'tratamento', label: 'Tratamentos' },
+  { value: 'orcamento', label: 'Orçamentos' },
   { value: 'pagamento', label: 'Recebimentos' },
   { value: 'receita', label: 'Outras receitas' },
   { value: 'despesa', label: 'Gastos' },

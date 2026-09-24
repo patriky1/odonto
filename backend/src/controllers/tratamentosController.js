@@ -4,6 +4,40 @@ const { autor, registrarAuditoria } = require('../utils/auditoria');
 
 const ROTULO_STATUS = { nao_iniciado: 'Não iniciado', em_andamento: 'Em andamento', concluido: 'Concluído', cancelado: 'Cancelado' };
 
+const MAX_IMAGENS = 10;
+
+/** Coluna `imagens` (JSON) → lista de caminhos. */
+const lerImagens = (t) => {
+  try {
+    const lista = JSON.parse(t?.imagens || '[]');
+    return Array.isArray(lista) ? lista.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Devolve o tratamento com `imagens` já como lista. */
+const comImagens = (t) => (t ? { ...t, imagens: lerImagens(t) } : t);
+
+/**
+ * Grava a galeria enviada pela tela. Cada item pode ser um caminho já salvo
+ * (/uploads/...) ou uma imagem nova (data URL). Devolve a lista de caminhos.
+ */
+const salvarGaleria = (imagens) => {
+  if (!Array.isArray(imagens)) return [];
+  const lista = imagens.filter(Boolean);
+  if (lista.length > MAX_IMAGENS) {
+    throw Object.assign(new Error(`Cada tratamento aceita no máximo ${MAX_IMAGENS} imagens`), { status: 400 });
+  }
+  return lista.map((img) => salvarDataUrl(img, 'tratamentos'));
+};
+
+/** Nome curto do tratamento a partir da descrição (primeira linha). */
+const nomeDaDescricao = (descricao) => {
+  const linha = String(descricao || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
+  return linha.length > 80 ? `${linha.slice(0, 77)}...` : linha;
+};
+
 const nomePaciente = (id) => db.prepare('SELECT nome FROM pacientes WHERE id = ?').get(id)?.nome || `Paciente #${id}`;
 
 const auditar = (req, acao, t, extra = '') => registrarAuditoria(req, {
@@ -26,9 +60,9 @@ exports.listar = (req, res) => {
   if (pacienteId) { sql += ' AND t.pacienteId = ?'; params.push(pacienteId); }
   if (status) { sql += ' AND t.status = ?'; params.push(status); }
   if (dentistaId) { sql += ' AND t.dentistaId = ?'; params.push(dentistaId); }
-  if (comFotos === 'true') { sql += ' AND (t.fotoAntes IS NOT NULL OR t.fotoDepois IS NOT NULL)'; }
+  if (comFotos === 'true') { sql += " AND t.imagens IS NOT NULL AND t.imagens <> '[]'"; }
   sql += ' ORDER BY t.createdAt DESC';
-  const rows = db.prepare(sql).all(...params);
+  const rows = db.prepare(sql).all(...params).map(comImagens);
   rows.forEach(r => { r.paciente = { id: r.pacienteId, nome: r.pacienteNome }; delete r.pacienteNome; });
   res.json(rows);
 };
@@ -37,26 +71,27 @@ exports.buscarPorId = (req, res) => {
   const t = db.prepare("SELECT t.*, p.nome as pacienteNome FROM tratamentos t LEFT JOIN pacientes p ON t.pacienteId = p.id WHERE t.id = ?").get(req.params.id);
   if (!t) return res.status(404).json({ erro: 'Tratamento não encontrado', error: 'Tratamento não encontrado' });
   t.paciente = { id: t.pacienteId, nome: t.pacienteNome }; delete t.pacienteNome;
-  res.json(t);
+  res.json(comImagens(t));
 };
 
 exports.criar = (req, res) => {
   try {
-    const { pacienteId, nome, descricao, valor = 0, sessoes = 1, sessoesRealizadas = 0, status = 'nao_iniciado', dentistaId, fotoAntes, fotoDepois } = req.body;
-    if (!pacienteId || !nome) return res.status(400).json({ erro: 'Paciente e nome são obrigatórios', error: 'Paciente e nome são obrigatórios' });
+    const { pacienteId, descricao, valor = 0, sessoes = 1, sessoesRealizadas = 0, status = 'nao_iniciado', dentistaId, imagens } = req.body;
+    // A tela pede só a descrição; o nome é tirado dela quando não vem preenchido
+    const nome = String(req.body.nome || '').trim() || nomeDaDescricao(descricao);
+    if (!pacienteId || !nome) return res.status(400).json({ erro: 'Paciente e descrição são obrigatórios', error: 'Paciente e descrição são obrigatórios' });
 
-    // As fotos são opcionais — o tratamento salva normalmente sem elas
-    const caminhoAntes = fotoAntes ? salvarDataUrl(fotoAntes, 'tratamentos') : null;
-    const caminhoDepois = fotoDepois ? salvarDataUrl(fotoDepois, 'tratamentos') : null;
+    // As imagens são opcionais — o tratamento salva normalmente sem elas
+    const galeria = salvarGaleria(imagens);
 
     const quem = autor(req);
     const r = db.prepare(`INSERT INTO tratamentos
-      (pacienteId, nome, descricao, valor, sessoes, sessoesRealizadas, status, dentistaId, fotoAntes, fotoDepois, criadoPorId, criadoPorNome)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (pacienteId, nome, descricao, valor, sessoes, sessoesRealizadas, status, dentistaId, imagens, criadoPorId, criadoPorNome)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(pacienteId, nome, descricao||null, valor, sessoes, sessoesRealizadas, status, dentistaId||null,
-        caminhoAntes, caminhoDepois, quem.id, quem.nome);
-    const criado = db.prepare('SELECT * FROM tratamentos WHERE id = ?').get(r.lastInsertRowid);
-    auditar(req, 'criou', criado);
+        JSON.stringify(galeria), quem.id, quem.nome);
+    const criado = comImagens(db.prepare('SELECT * FROM tratamentos WHERE id = ?').get(r.lastInsertRowid));
+    auditar(req, 'criou', criado, galeria.length ? `${galeria.length} imagem(ns)` : '');
     res.status(201).json(criado);
   } catch (e) {
     res.status(e.status || 500).json({ erro: e.message, error: e.message });
@@ -68,40 +103,29 @@ exports.atualizar = (req, res) => {
     const { id } = req.params;
     const t = db.prepare('SELECT * FROM tratamentos WHERE id = ?').get(id);
     if (!t) return res.status(404).json({ erro: 'Tratamento não encontrado', error: 'Tratamento não encontrado' });
-    const { nome, descricao, valor, sessoes, sessoesRealizadas, status, dentistaId, fotoAntes, fotoDepois } = req.body;
+    const { descricao, valor, sessoes, sessoesRealizadas, status, dentistaId, imagens } = req.body;
+    const nome = String(req.body.nome || '').trim() || (descricao !== undefined ? nomeDaDescricao(descricao) : '') || t.nome;
 
-    // Fotos: undefined = não mexe | null/'' = remove | data URL = substitui
-    let caminhoAntes = t.fotoAntes;
-    if (fotoAntes !== undefined) {
-      if (!fotoAntes) { removerArquivo(t.fotoAntes); caminhoAntes = null; }
-      else {
-        const novo = salvarDataUrl(fotoAntes, 'tratamentos');
-        if (novo !== t.fotoAntes) removerArquivo(t.fotoAntes);
-        caminhoAntes = novo;
-      }
-    }
-    let caminhoDepois = t.fotoDepois;
-    if (fotoDepois !== undefined) {
-      if (!fotoDepois) { removerArquivo(t.fotoDepois); caminhoDepois = null; }
-      else {
-        const novo = salvarDataUrl(fotoDepois, 'tratamentos');
-        if (novo !== t.fotoDepois) removerArquivo(t.fotoDepois);
-        caminhoDepois = novo;
-      }
+    // Galeria: undefined = não mexe | lista = nova galeria (o que saiu da lista é apagado do disco)
+    const anteriores = lerImagens(t);
+    let galeria = anteriores;
+    if (imagens !== undefined) {
+      galeria = salvarGaleria(imagens);
+      anteriores.filter((c) => !galeria.includes(c)).forEach(removerArquivo);
     }
 
     const quem = autor(req);
     db.prepare(`UPDATE tratamentos SET nome=?, descricao=?, valor=?, sessoes=?, sessoesRealizadas=?, status=?, dentistaId=?,
-                fotoAntes=?, fotoDepois=?, atualizadoPorId=?, atualizadoPorNome=?, updatedAt=datetime('now') WHERE id=?`)
-      .run(nome||t.nome, descricao ?? t.descricao, valor !== undefined ? valor : t.valor,
+                imagens=?, atualizadoPorId=?, atualizadoPorNome=?, updatedAt=datetime('now') WHERE id=?`)
+      .run(nome, descricao ?? t.descricao, valor !== undefined ? valor : t.valor,
         sessoes||t.sessoes, sessoesRealizadas !== undefined ? sessoesRealizadas : t.sessoesRealizadas,
         status||t.status, dentistaId !== undefined ? (dentistaId||null) : t.dentistaId,
-        caminhoAntes, caminhoDepois, quem.id, quem.nome, id);
-    const atualizado = db.prepare('SELECT * FROM tratamentos WHERE id = ?').get(id);
+        JSON.stringify(galeria), quem.id, quem.nome, id);
+    const atualizado = comImagens(db.prepare('SELECT * FROM tratamentos WHERE id = ?').get(id));
     const mudancas = [];
     if (t.status !== atualizado.status) mudancas.push(`status: ${ROTULO_STATUS[t.status] || t.status} → ${ROTULO_STATUS[atualizado.status] || atualizado.status}`);
-    if (t.sessoesRealizadas !== atualizado.sessoesRealizadas) mudancas.push(`sessões: ${atualizado.sessoesRealizadas}/${atualizado.sessoes}`);
-    if (Number(t.valor) !== Number(atualizado.valor)) mudancas.push('valor alterado');
+    if (t.descricao !== atualizado.descricao) mudancas.push('descrição alterada');
+    if (anteriores.length !== galeria.length || anteriores.some((c, i) => c !== galeria[i])) mudancas.push(`galeria: ${galeria.length} imagem(ns)`);
     auditar(req, 'editou', atualizado, mudancas.join('; '));
     res.json(atualizado);
   } catch (e) {
@@ -113,9 +137,12 @@ exports.excluir = (req, res) => {
   const t = db.prepare('SELECT * FROM tratamentos WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ erro: 'Tratamento não encontrado', error: 'Tratamento não encontrado' });
   // Não deixa imagens órfãs no disco
+  lerImagens(t).forEach(removerArquivo);
   removerArquivo(t.fotoAntes);
   removerArquivo(t.fotoDepois);
   db.prepare('DELETE FROM tratamentos WHERE id = ?').run(req.params.id);
   auditar(req, 'excluiu', t);
   res.json({ mensagem: 'Tratamento excluído' });
 };
+
+exports.comImagens = comImagens;

@@ -23,6 +23,7 @@ const salasRoutes = require('./routes/salas');
 const recibosRoutes = require('./routes/recibos');
 const auditoriaRoutes = require('./routes/auditoria');
 const termosRoutes = require('./routes/termos');
+const orcamentoRoutes = require('./routes/orcamento');
 const { ocultarAuditoriaParaNaoAdmin } = require('./utils/auditoria');
 
 const errorHandler = require('./middlewares/errorHandler');
@@ -35,11 +36,11 @@ app.use(cors({
   credentials: true,
 }));
 
-// Limite maior: as fotos de tratamento chegam como data URL em JSON
-app.use(express.json({ limit: '12mb' }));
-app.use(express.urlencoded({ extended: true, limit: '12mb' }));
+// Limite maior: a galeria do tratamento (até 10 imagens) chega como data URL em JSON
+app.use(express.json({ limit: '30mb' }));
+app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
-// Imagens enviadas (fotos de antes/depois dos tratamentos)
+// Imagens enviadas (galeria dos tratamentos, fotos de pacientes, assinaturas)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads'), { maxAge: '7d' }));
 
 // "Quem registrou" só chega ao navegador do administrador
@@ -66,6 +67,7 @@ app.use('/api/salas', salasRoutes);
 app.use('/api/recibos', recibosRoutes);
 app.use('/api/auditoria', auditoriaRoutes);
 app.use('/api/termos', termosRoutes);
+app.use('/api/orcamento', orcamentoRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

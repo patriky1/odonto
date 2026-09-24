@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const { montarAlertas } = require('./anamneseController');
 const { hojeISO } = require('../utils/datas');
+const { comImagens } = require('./tratamentosController');
 
 /* ================================================================== *
  * PRONTUÁRIO AUTOMÁTICO
@@ -89,9 +90,9 @@ exports.automatico = (req, res) => {
         WHERE a.pacienteId = ? ORDER BY a.data, a.horaInicio`).all(pacienteId);
 
     const tratamentos = db.prepare(`SELECT t.id, t.nome, t.descricao, t.valor, t.sessoes, t.sessoesRealizadas, t.status,
-        t.dentistaId, t.fotoAntes, t.fotoDepois, t.createdAt, t.updatedAt, d.nome AS dentistaNome
+        t.dentistaId, t.imagens, t.createdAt, t.updatedAt, d.nome AS dentistaNome
         FROM tratamentos t LEFT JOIN dentistas d ON t.dentistaId = d.id
-        WHERE t.pacienteId = ? ORDER BY t.createdAt`).all(pacienteId);
+        WHERE t.pacienteId = ? ORDER BY t.createdAt`).all(pacienteId).map(comImagens);
 
     const odontoAtual = db.prepare(`SELECT o.numeroDente, o.face, o.status, o.procedimento, o.observacoes, o.updatedAt,
         d.nome AS dentistaNome
@@ -162,9 +163,9 @@ exports.automatico = (req, res) => {
     tratamentos.forEach((t) => {
       eventos.push({
         id: `tr-${t.id}-ini`, tipo: 'tratamento', quando: paraISO(t.createdAt),
-        titulo: t.nome, subtitulo: 'Tratamento registrado no plano',
+        titulo: t.nome, subtitulo: 'Tratamento registrado',
         dentista: t.dentistaNome || null,
-        detalhes: [t.descricao, `${t.sessoes} sessão(ões) previstas`].filter(Boolean),
+        detalhes: [t.descricao !== t.nome && t.descricao, t.imagens.length && `${t.imagens.length} imagem(ns) na galeria`].filter(Boolean),
         referenciaId: t.id,
       });
       if (t.status === 'concluido' || t.status === 'cancelado') {

@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar, Activity, Smile, Braces, NotebookPen, ClipboardList, FileSignature, UserX,
-  Printer, Plus, AlertTriangle, RefreshCw, Pencil,
+  Printer, Plus, AlertTriangle, RefreshCw, Pencil, Images,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import Modal from '../common/Modal';
 import AnotacaoForm from './AnotacaoForm';
-import { formatDate, getStatusAgendamento } from '../../utils/formatters';
+import { formatDate, dataDoBanco, getStatusAgendamento } from '../../utils/formatters';
 import { imprimirHtml, montarHtmlProntuario } from '../../utils/impressao';
 
 /** Aparência de cada tipo de registro na linha do tempo. */
@@ -132,8 +132,8 @@ export default function ProntuarioAutomatico({ pacienteId }) {
             <span>último atendimento</span>
           </div>
           <div className="pront-resumo-item">
-            <strong>{resumo.tratamentos.ativos}</strong>
-            <span>tratamento(s) em aberto de {resumo.tratamentos.total}</span>
+            <strong>{resumo.tratamentos.total}</strong>
+            <span>tratamento(s) registrado(s)</span>
           </div>
           <div className="pront-resumo-item"><strong>{resumo.faltas}</strong><span>falta(s)</span></div>
           <div className="pront-resumo-item">
@@ -166,7 +166,7 @@ export default function ProntuarioAutomatico({ pacienteId }) {
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Odontograma atual</h3>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/odontograma?paciente=${pacienteId}`)}>Abrir</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/pacientes/${pacienteId}?aba=orcamento`)}>Abrir</button>
           </div>
           {odontograma.totalMarcacoes === 0 ? (
             <p className="text-sm text-muted">Nenhuma marcação no odontograma.</p>
@@ -195,26 +195,22 @@ export default function ProntuarioAutomatico({ pacienteId }) {
         </div>
 
         <div className="card">
-          <div className="card-header"><h3 className="card-title">Plano de tratamento</h3></div>
+          <div className="card-header"><h3 className="card-title">Tratamentos</h3></div>
           {tratamentos.length === 0 ? (
             <p className="text-sm text-muted">Nenhum tratamento registrado.</p>
-          ) : tratamentos.map((t) => {
-            const pct = t.sessoes > 0 ? Math.round((t.sessoesRealizadas / t.sessoes) * 100) : 0;
-            return (
-              <div key={t.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <strong style={{ fontSize: 13.5 }}>{t.nome}</strong>
-                  <span className={`badge ${t.status === 'concluido' ? 'badge-success' : t.status === 'em_andamento' ? 'badge-warning' : t.status === 'cancelado' ? 'badge-danger' : 'badge-gray'}`}>
-                    {t.statusRotulo}
-                  </span>
-                </div>
-                <p className="text-xs text-muted">{t.sessoesRealizadas}/{t.sessoes} sessões{t.dentistaNome ? ` — ${t.dentistaNome}` : ''}</p>
-                <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 4 }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: 'var(--success)', borderRadius: 2 }} />
-                </div>
+          ) : tratamentos.map((t) => (
+            <div key={t.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <p style={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{t.descricao || t.nome}</p>
+                <span className="text-xs text-muted" style={{ whiteSpace: 'nowrap' }}>{formatDate(dataDoBanco(t.createdAt))}</span>
               </div>
-            );
-          })}
+              {t.imagens?.length > 0 && (
+                <p className="text-xs text-muted" style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <Images size={12} /> {t.imagens.length} imagem(ns) na galeria
+                </p>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

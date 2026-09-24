@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, Users, Calendar, UserCog, FileText, Stethoscope,
-  Smile, DollarSign, Settings, LogOut, ClipboardList, Activity, X, ShieldCheck
+  DollarSign, Settings, LogOut, ClipboardList, Activity, X, ShieldCheck
 } from 'lucide-react';
 import Logo from '../image/Logo.png';
 const navItems = [
@@ -11,7 +11,6 @@ const navItems = [
   { to: '/pacientes', icon: Users, label: 'Pacientes' },
   { to: '/dentistas', icon: Stethoscope, label: 'Dentistas' },
   { to: '/prontuarios', icon: FileText, label: 'Prontuários' },
-  { to: '/odontograma', icon: Smile, label: 'Odontograma' },
   { to: '/tratamentos', icon: Activity, label: 'Tratamentos' },
   { to: '/procedimentos', icon: ClipboardList, label: 'Procedimentos' },
   { to: '/financeiro', icon: DollarSign, label: 'Financeiro' },

@@ -74,7 +74,6 @@ export default function ProntuariosList() {
                     <td data-label="Atendimentos">{p.atendimentos}</td>
                     <td data-label="Tratamentos">
                       {p.tratamentos}
-                      {p.tratamentosAtivos > 0 && <span className="badge badge-warning" style={{ marginLeft: 6 }}>{p.tratamentosAtivos} em aberto</span>}
                     </td>
                     <td data-label="Odontograma">{p.marcacoesOdontograma ? `${p.marcacoesOdontograma} marcação(ões)` : '—'}</td>
                     <td data-label="Anamnese">

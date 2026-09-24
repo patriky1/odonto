@@ -1,5 +1,5 @@
 import { enderecoEmpresa, formatarDocumento } from './recibo';
-import { formatDate, formatCPF, calcularIdade, formatDataHoraBanco } from './formatters';
+import { formatDate, formatCPF, calcularIdade, formatDataHoraBanco, dataDoBanco } from './formatters';
 
 /* ================================================================== *
  * IMPRESSÃO DE DOCUMENTOS (termo de consentimento e prontuário)
@@ -187,7 +187,7 @@ export const montarHtmlProntuario = (dados, { empresa = {}, tipos = null } = {})
     <ul class="lista-simples">
       <li>Atendimentos realizados: ${esc(r.totalAtendimentos)}${r.primeiroAtendimento ? ` (de ${esc(formatDate(r.primeiroAtendimento))} a ${esc(formatDate(r.ultimoAtendimento))})` : ''}</li>
       <li>Faltas: ${esc(r.faltas)}</li>
-      <li>Tratamentos: ${esc(r.tratamentos?.total)} (${esc(r.tratamentos?.ativos)} em aberto, ${esc(r.tratamentos?.concluidos)} concluídos)</li>
+      <li>Tratamentos registrados: ${esc(r.tratamentos?.total)}</li>
       ${r.dentistas?.length ? `<li>Profissionais: ${esc(r.dentistas.join(', '))}</li>` : ''}
     </ul>
 
@@ -195,7 +195,7 @@ export const montarHtmlProntuario = (dados, { empresa = {}, tipos = null } = {})
 
     ${dados.odontograma?.resumo?.length ? `<h3>Odontograma — situação atual</h3><ul class="lista-simples">${dados.odontograma.resumo.map((o) => `<li>${esc(o.rotulo)}: dentes ${esc(o.dentes.join(', '))}</li>`).join('')}</ul>` : ''}
 
-    ${dados.tratamentos?.length ? `<h3>Plano de tratamento</h3><ul class="lista-simples">${dados.tratamentos.map((t) => `<li>${esc(t.nome)} — ${esc(t.statusRotulo)} (${esc(t.sessoesRealizadas)}/${esc(t.sessoes)} sessões)${t.dentistaNome ? ` — ${esc(t.dentistaNome)}` : ''}</li>`).join('')}</ul>` : ''}
+    ${dados.tratamentos?.length ? `<h3>Tratamentos</h3><ul class="lista-simples">${dados.tratamentos.map((t) => `<li>${esc(formatDate(dataDoBanco(t.createdAt)))} — ${esc(t.descricao || t.nome)}${t.imagens?.length ? ` (${esc(t.imagens.length)} imagem(ns))` : ''}</li>`).join('')}</ul>` : ''}
 
     <h3>Evolução clínica</h3>
     ${eventos.length ? eventos.map(blocoEvento).join('') : '<p>Nenhum registro.</p>'}
@@ -208,4 +208,68 @@ export const montarHtmlProntuario = (dados, { empresa = {}, tipos = null } = {})
     </div>
     <div class="rodape">Prontuário gerado em ${esc(quando(dados.geradoEm))} a partir dos registros do sistema.</div>`;
   return documento(`Prontuário — ${p.nome || ''}`, corpo);
+};
+
+/* ------------------------------------------------------------------ *
+ * ORÇAMENTO (odontograma)
+ * ------------------------------------------------------------------ */
+
+const moeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
+
+export const montarHtmlOrcamento = ({ paciente = {}, itens = [], empresa = {} } = {}) => {
+  const p = paciente || {};
+  const total = itens.reduce((t, i) => t + (Number(i.valor) || 0), 0);
+  const realizado = itens.filter((i) => i.realizado).reduce((t, i) => t + (Number(i.valor) || 0), 0);
+
+  const linhas = itens.map((i, n) => `
+    <tr${i.realizado ? ' class="feito"' : ''}>
+      <td>${n + 1}</td>
+      <td>${i.numeroDente ? `Dente ${esc(i.numeroDente)}` : 'Boca inteira'}${i.faces?.length ? ` <small>(${esc(i.faces.join(', '))})</small>` : ''}</td>
+      <td>${esc(i.procedimento)}${i.observacoes ? `<br /><small>${esc(i.observacoes)}</small>` : ''}</td>
+      <td class="centro">${i.realizado ? 'Realizado' : 'A realizar'}</td>
+      <td class="valor">${i.valor === null || i.valor === undefined ? '—' : esc(moeda(i.valor))}</td>
+    </tr>`).join('');
+
+  const corpo = `
+    <style>
+      .orc { width: 100%; border-collapse: collapse; margin-top: 6px; }
+      .orc th, .orc td { border: 1px solid #e2e8f0; padding: 6px 8px; font-size: 11.5px; vertical-align: top; text-align: left; }
+      .orc th { background: #f1f5f9; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: #475569; }
+      .orc small { color: #64748b; }
+      .orc .valor { text-align: right; white-space: nowrap; }
+      .orc .centro { text-align: center; white-space: nowrap; }
+      .orc tr.feito td { background: #dcfce7; }
+      .orc tfoot td { font-weight: 700; background: #f8fafc; }
+    </style>
+    ${cabecalhoEmpresa(empresa)}
+    <h2>Orçamento Odontológico</h2>
+    <table class="ident"><tbody><tr>
+      <td><span>Paciente</span>${esc(p.nome)}</td>
+      <td><span>CPF</span>${esc(p.cpf ? formatCPF(p.cpf) : '—')}</td>
+      <td><span>Telefone</span>${esc(p.telefone || p.whatsapp || '—')}</td>
+      <td><span>Data</span>${esc(new Date().toLocaleDateString('pt-BR'))}</td>
+    </tr></tbody></table>
+
+    <table class="orc">
+      <thead><tr><th>#</th><th>Dente</th><th>Procedimento</th><th class="centro">Situação</th><th class="valor">Valor</th></tr></thead>
+      <tbody>${linhas}</tbody>
+      <tfoot>
+        ${realizado > 0 ? `<tr><td colspan="4" class="valor">Já realizado</td><td class="valor">${esc(moeda(realizado))}</td></tr>
+        <tr><td colspan="4" class="valor">A realizar</td><td class="valor">${esc(moeda(total - realizado))}</td></tr>` : ''}
+        <tr><td colspan="4" class="valor">Total do orçamento</td><td class="valor">${esc(moeda(total))}</td></tr>
+      </tfoot>
+    </table>
+
+    <div class="assinaturas">
+      <div class="assinatura">
+        <div class="linha">${esc(p.responsavel || p.nome || 'Paciente')}</div>
+        <small>${p.responsavel ? 'Responsável' : 'Paciente'}</small>
+      </div>
+      <div class="assinatura">
+        <div class="linha">${esc(empresa.responsavel || 'Profissional responsável')}</div>
+        <small>${esc(croTexto(empresa.cro) || 'Cirurgião(ã)-dentista')}</small>
+      </div>
+    </div>
+    <div class="rodape">Orçamento emitido em ${esc(quando(new Date().toISOString()))}.</div>`;
+  return documento(`Orçamento — ${p.nome || ''}`, corpo);
 };

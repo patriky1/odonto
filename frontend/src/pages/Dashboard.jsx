@@ -6,6 +6,9 @@ import api from '../services/api';
 import { ValorProtegido, BlocoProtegido } from '../components/common/ValorProtegido';
 import { formatCurrency, formatDate, getStatusAgendamento, dataISO } from '../utils/formatters';
 import LinkPaciente from '../components/common/LinkPaciente';
+import AgendaPage from './Agenda/AgendaPage';
+import useIsMobile from '../hooks/useIsMobile';
+import { useAuth } from '../contexts/AuthContext';
 
 function StatCard({ icon: Icon, label, value, color, sub, protegido, onClick, dica }) {
   const clicavel = !!onClick;
@@ -36,7 +39,63 @@ function StatCard({ icon: Icon, label, value, color, sub, protegido, onClick, di
 
 const STATUS_COLORS = { concluido: '#10b981', agendado: '#2563eb', cancelado: '#ef4444', confirmado: '#6366f1', em_atendimento: '#f59e0b', nao_compareceu: '#94a3b8' };
 
+const saudacao = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+};
+
+/**
+ * Página inicial no celular: só o essencial — saudação, aniversariantes
+ * do dia (se houver) e a agenda do dia, já com as ações à mão.
+ * Gráficos e números gerais ficam para a tela do computador.
+ */
+function InicioMobile() {
+  const { usuario } = useAuth();
+  const [aniversariantes, setAniversariantes] = useState([]);
+
+  useEffect(() => {
+    const hoje = dataISO(new Date()).slice(5); // MM-DD
+    api.get('/dashboard')
+      .then((r) => setAniversariantes((r.data.aniversariantes || []).filter((p) => String(p.dataNascimento || '').slice(5, 10) === hoje)))
+      .catch(() => {});
+  }, []);
+
+  const hojeExtenso = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  return (
+    <div>
+      <div className="inicio-m-saudacao">
+        <h1>{saudacao()}, {usuario?.nome?.split(' ')[0] || ''}!</h1>
+        <p>{hojeExtenso}</p>
+      </div>
+
+      {aniversariantes.length > 0 && (
+        <div className="card inicio-m-aniversario">
+          <span style={{ fontSize: 22 }}>🎂</span>
+          <div style={{ minWidth: 0 }}>
+            <p className="text-sm font-semibold">Aniversário hoje</p>
+            <p className="text-sm">
+              {aniversariantes.map((p, i) => (
+                <span key={p.id}>{i > 0 && ', '}<LinkPaciente id={p.id} nome={p.nome} /></span>
+              ))}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <AgendaPage inicio />
+    </div>
+  );
+}
+
 export default function Dashboard() {
+  const isMobile = useIsMobile();
+  return isMobile ? <InicioMobile /> : <DashboardCompleto />;
+}
+
+function DashboardCompleto() {
   const navigate = useNavigate();
   const [dados, setDados] = useState(null);
   const abrirAgenda = (data = dataISO(new Date())) => navigate(`/agenda?view=dia&data=${String(data).split('T')[0]}`);

@@ -460,3 +460,129 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .pront-marcador { left: -22px; }
   .assinatura-quadro canvas { height: 180px; }
 }
+
+/* ═══════════════════════════════════
+   CELULAR — navegação inferior, início e agenda
+═══════════════════════════════════ */
+.bottom-nav, .fab { display: none; }
+
+@media (max-width: 768px) {
+  :root { --bottom-nav-height: 62px; }
+
+  /* Barra inferior fixa com os atalhos principais */
+  .bottom-nav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 150;
+    height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #fff; border-top: 1px solid var(--border);
+    box-shadow: 0 -4px 12px rgba(0,0,0,.06);
+  }
+  .bottom-nav-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    background: none; border: none; cursor: pointer; font: inherit; font-size: 11px; font-weight: 500;
+    color: var(--text-muted); text-decoration: none; -webkit-tap-highlight-color: transparent;
+  }
+  .bottom-nav-item.ativo { color: var(--primary); font-weight: 700; }
+
+  /* Conteúdo não fica escondido atrás da barra */
+  .page-content { padding-bottom: calc(var(--bottom-nav-height) + 24px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Header mais baixo; o menu agora fica na barra inferior */
+  .app-header { height: 52px; }
+  .menu-toggle { display: none; }
+
+  /* Botão flutuante (novo agendamento) */
+  .fab {
+    display: flex; align-items: center; justify-content: center;
+    position: fixed; right: 18px; z-index: 140;
+    bottom: calc(var(--bottom-nav-height) + 16px + env(safe-area-inset-bottom, 0px));
+    width: 58px; height: 58px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--primary); color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.25);
+  }
+  .fab:active { transform: scale(.95); }
+
+  /* Toques mais fáceis e sem zoom automático do iPhone ao digitar (fonte < 16px) */
+  .btn { min-height: 40px; }
+  .btn-icon { min-width: 40px; justify-content: center; }
+  .form-control, select.form-control, textarea.form-control { font-size: 16px; }
+
+  /* Janelas (formulários) abrem como "folha" vinda de baixo, ocupando a largura toda */
+  .modal-overlay:not(.confirm-overlay) { align-items: flex-end; padding: 0; }
+  .modal-overlay:not(.confirm-overlay) .modal { max-width: 100%; max-height: 94vh; max-height: 94dvh; border-radius: 16px 16px 0 0; }
+  .modal-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .modal-footer .btn { flex: 1 1 auto; justify-content: center; }
+
+  /* Início */
+  .inicio-m-saudacao { margin-bottom: 14px; }
+  .inicio-m-saudacao h1 { font-size: 20px; font-weight: 700; line-height: 1.3; }
+  .inicio-m-saudacao p { color: var(--text-muted); font-size: 14px; text-transform: capitalize; }
+  .inicio-m-aniversario { display: flex; gap: 12px; align-items: center; padding: 12px 14px; margin-bottom: 14px; background: #fdf2f8; border-color: #fbcfe8; }
+
+  /* Agenda */
+  .agenda-m-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .agenda-m-topo h1 { font-size: 18px; font-weight: 700; }
+  .agenda-m-controles { padding: 10px 12px 12px; margin-bottom: 14px; }
+  .agenda-m-nav { display: flex; align-items: center; gap: 4px; }
+  .agenda-m-data { flex: 1; text-align: center; line-height: 1.25; }
+  .agenda-m-data strong { display: block; font-size: 17px; }
+  .agenda-m-data span { font-size: 13px; color: var(--text-muted); }
+  .agenda-m-semana { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+  .agenda-m-dia {
+    display: flex; flex-direction: column; align-items: center; padding: 6px 0; border-radius: 10px;
+    border: 1px solid transparent; background: var(--bg); cursor: pointer; font: inherit; color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .agenda-m-dia span { font-size: 11px; color: var(--text-muted); font-weight: 600; }
+  .agenda-m-dia strong { font-size: 16px; line-height: 1.2; }
+  .agenda-m-dia.hoje { border-color: var(--primary); }
+  .agenda-m-dia.selecionado { background: var(--primary); border-color: var(--primary); }
+  .agenda-m-dia.selecionado span, .agenda-m-dia.selecionado strong { color: #fff; }
+  .agenda-m-filtros { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+  .ag-m-lista { display: flex; flex-direction: column; gap: 10px; }
+  .ag-m-card {
+    display: flex; gap: 12px; padding: 12px; background: #fff; border: 1px solid var(--border);
+    border-left: 5px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ag-m-card:active { background: #f8fafc; }
+  .ag-m-hora { display: flex; flex-direction: column; align-items: center; min-width: 50px; padding-top: 2px; line-height: 1.2; }
+  .ag-m-hora strong { font-size: 17px; }
+  .ag-m-hora span { font-size: 12px; color: var(--text-muted); }
+  .ag-m-info { flex: 1; min-width: 0; }
+  .ag-m-paciente { font-size: 16px; font-weight: 700; line-height: 1.3; }
+  .ag-m-acoes { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .ag-m-status { flex: 1; min-width: 0; padding: 7px 10px; font-weight: 600; border-width: 1px; }
+}
+
+/* ------------------------------------------------------------------ *
+ * ORÇAMENTO (aba do paciente)
+ * ------------------------------------------------------------------ */
+.orcamento-feito td, .table-cards tr.orcamento-feito, .table tr.orcamento-feito:hover td { background: #dcfce7 !important; }
+.orcamento-totais { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px 24px; margin-top: 12px; padding: 12px 14px; background: var(--bg); border-radius: 10px; }
+.orcamento-totais > div { display: flex; flex-direction: column; align-items: flex-end; }
+.orcamento-totais > div span { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+.orcamento-totais > div strong { font-size: 15px; }
+.orcamento-totais .orcamento-total strong { font-size: 20px; color: var(--primary); }
+@media (max-width: 700px) {
+  .orcamento-totais { justify-content: space-between; }
+  .orcamento-totais > div { align-items: flex-start; }
+}
+
+/* ------------------------------------------------------------------ *
+ * GALERIA DE IMAGENS (tratamentos)
+ * ------------------------------------------------------------------ */
+.galeria-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.galeria-item { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); padding: 0; cursor: pointer; }
+.galeria-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.galeria-adicionar { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 2px dashed var(--border); color: var(--text-muted); }
+.galeria-adicionar:hover { border-color: var(--primary); color: var(--primary); }
+.galeria-remover { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(15,23,42,.7); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.galeria-remover:hover { background: var(--danger); }
+.galeria-lightbox { position: fixed; inset: 0; z-index: 1200; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 48px 16px; }
+.galeria-lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+.galeria-lightbox-fechar, .galeria-lightbox-nav { position: absolute; border: none; background: rgba(255,255,255,.12); color: #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.galeria-lightbox-fechar { top: 12px; right: 12px; }
+.galeria-lightbox-nav { top: 50%; transform: translateY(-50%); }
+.galeria-lightbox-fechar:hover, .galeria-lightbox-nav:hover { background: rgba(255,255,255,.25); }
+.galeria-lightbox-contador { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; }

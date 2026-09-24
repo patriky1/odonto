@@ -476,7 +476,42 @@ db.exec(`
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
     updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Orçamento clínico: uma linha por procedimento indicado no odontograma
+  CREATE TABLE IF NOT EXISTS orcamento_itens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pacienteId INTEGER NOT NULL REFERENCES pacientes(id),
+    numeroDente INTEGER,              -- NULL = boca inteira (sem dente)
+    faces TEXT,                       -- ex.: "M,O,D" (NULL = dente inteiro)
+    status TEXT,                      -- situação marcada no odontograma
+    procedimentoId INTEGER REFERENCES procedimentos(id),
+    procedimento TEXT NOT NULL,
+    valor REAL,                       -- NULL = preço ainda não informado
+    realizado INTEGER NOT NULL DEFAULT 0,
+    realizadoEm TEXT,
+    observacoes TEXT,
+    criadoPorId INTEGER,
+    criadoPorNome TEXT,
+    atualizadoPorId INTEGER,
+    atualizadoPorNome TEXT,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+    updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
+
+// Tratamentos: galeria de imagens (lista JSON de caminhos /uploads/...)
+garantirColunas('tratamentos', { imagens: 'TEXT' });
+
+// As fotos de "antes e depois" antigas passam a fazer parte da galeria
+try {
+  const antigos = db.prepare(`SELECT id, fotoAntes, fotoDepois FROM tratamentos
+    WHERE imagens IS NULL AND (fotoAntes IS NOT NULL OR fotoDepois IS NOT NULL)`).all();
+  const migrar = db.prepare('UPDATE tratamentos SET imagens = ?, fotoAntes = NULL, fotoDepois = NULL WHERE id = ?');
+  antigos.forEach((t) => migrar.run(JSON.stringify([t.fotoAntes, t.fotoDepois].filter(Boolean)), t.id));
+  if (antigos.length) console.log(`🔧 Migração: fotos de ${antigos.length} tratamento(s) movidas para a galeria`);
+} catch (e) {
+  console.warn('⚠️  Não foi possível migrar as fotos dos tratamentos:', e.message);
+}
 
 // Receitas e despesas antigas já guardavam usuarioId: aproveita como "criado por"
 try {
@@ -527,6 +562,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_receitas_dentista       ON receitas(dentistaId);
   CREATE INDEX IF NOT EXISTS idx_despesas_dentista       ON despesas(dentistaId);
   CREATE INDEX IF NOT EXISTS idx_tratamentos_dentista    ON tratamentos(dentistaId);
+  CREATE INDEX IF NOT EXISTS idx_orcamento_paciente      ON orcamento_itens(pacienteId);
 `);
 
 /* ------------------------------------------------------------------ *

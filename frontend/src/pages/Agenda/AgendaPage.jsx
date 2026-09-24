@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, ChevronLeft, ChevronRight, Calendar, UserCheck, AlertTriangle, DoorOpen, MessageCircle } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Calendar, UserCheck, AlertTriangle, DoorOpen, MessageCircle, SlidersHorizontal } from 'lucide-react';
 import api from '../../services/api';
 import Modal from '../../components/common/Modal';
 import AgendamentoForm from './AgendamentoForm';
@@ -8,7 +8,8 @@ import LinkPaciente from '../../components/common/LinkPaciente';
 import RegistradoPor from '../../components/common/RegistradoPor';
 import LembretesWhatsApp from './LembretesWhatsApp';
 import { useConfirmacao } from '../../components/common/ConfirmDialog';
-import { formatDate, getStatusAgendamento, dataISO, paraData } from '../../utils/formatters';
+import { formatDate, getStatusAgendamento, dataISO, paraData, numeroWhatsApp } from '../../utils/formatters';
+import useIsMobile from '../../hooks/useIsMobile';
 import toast from 'react-hot-toast';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -72,23 +73,113 @@ const posicionarDia = (ags) => {
   return resultado;
 };
 
+const STATUS_OPCOES = [
+  ['agendado', 'Agendado'], ['confirmado', 'Confirmado'], ['em_atendimento', 'Em Atendimento'],
+  ['concluido', 'Concluído'], ['cancelado', 'Cancelado'], ['nao_compareceu', 'Não Compareceu'],
+];
+const DIAS_SEMANA_LONGO = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+/**
+ * Lista do dia em formato de cartões, pensada para o celular:
+ * horário, paciente e procedimento bem visíveis; toque no cartão abre
+ * o agendamento; status e WhatsApp à mão sem abrir nada.
+ */
+function ListaDiaMobile({ ags, onAbrir, onStatus, onNovo }) {
+  if (ags.length === 0) {
+    return (
+      <div className="card empty-state" style={{ padding: '40px 20px' }}>
+        <Calendar size={36} />
+        <h3>Nenhum agendamento neste dia</h3>
+        <button className="btn btn-primary mt-2" onClick={onNovo}><Plus size={16} marginBottom={200} /> Agendar</button>
+      </div>
+    );
+  }
+
+  const concluidos = ags.filter((a) => a.status === 'concluido').length;
+  const cancelados = ags.filter((a) => a.status === 'cancelado' || a.status === 'nao_compareceu').length;
+
+  return (
+    <div>
+      <p className="text-sm text-muted" style={{ margin: '0 2px 10px' }}>
+        <strong style={{ color: 'var(--text)' }}>{ags.length}</strong> {ags.length === 1 ? 'consulta' : 'consultas'}
+        {concluidos > 0 && ` · ${concluidos} concluída${concluidos > 1 ? 's' : ''}`}
+        {cancelados > 0 && ` · ${cancelados} desmarcada${cancelados > 1 ? 's' : ''}`}
+      </p>
+      <div className="ag-m-lista">
+        {ags.map((ag) => {
+          const numero = numeroWhatsApp(ag.pacienteWhatsapp || ag.pacienteTelefone);
+          const riscado = ag.status === 'cancelado' || ag.status === 'nao_compareceu';
+          return (
+            <div
+              key={ag.id}
+              className="ag-m-card"
+              role="button"
+              tabIndex={0}
+              onClick={() => onAbrir(ag)}
+              onKeyDown={(e) => { if (e.key === 'Enter') onAbrir(ag); }}
+              style={{ borderLeftColor: STATUS_COLORS_BORDER[ag.status] || '#94a3b8', opacity: riscado ? 0.7 : 1 }}
+            >
+              <div className="ag-m-hora">
+                <strong>{ag.horaInicio}</strong>
+                {ag.horaFim && <span>{ag.horaFim}</span>}
+              </div>
+              <div className="ag-m-info">
+                <p className="ag-m-paciente truncate" style={{ textDecoration: riscado ? 'line-through' : 'none' }}>
+                  <LinkPaciente id={ag.pacienteId} nome={ag.pacienteNome} />
+                </p>
+                <p className="text-sm text-muted truncate">{ag.procedimentoNome || 'Consulta'}</p>
+                <p className="text-xs text-muted truncate">{ag.dentistaNome}{ag.salaNome ? ` · ${ag.salaNome}` : ''}</p>
+                <div className="ag-m-acoes" onClick={(e) => e.stopPropagation()}>
+                  <select
+                    className="form-control ag-m-status"
+                    value={ag.status}
+                    onChange={(e) => onStatus(ag.id, e.target.value)}
+                    aria-label="Status"
+                    style={{ background: STATUS_COLORS_BG[ag.status] || '#f1f5f9', borderColor: STATUS_COLORS_BORDER[ag.status] || 'var(--border)' }}
+                  >
+                    {STATUS_OPCOES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  {numero && (
+                    <a className="btn btn-secondary btn-icon" href={`https://wa.me/${numero}`} target="_blank" rel="noopener noreferrer"
+                      title="Conversar no WhatsApp" aria-label="Conversar no WhatsApp">
+                      <MessageCircle size={18} color="#16a34a" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const visaoInicial = (param) => {
   if (param === 'dia' || param === 'semana') return param;
   return typeof window !== 'undefined' && window.innerWidth < 768 ? 'dia' : 'semana';
 };
 
-export default function AgendaPage() {
+/**
+ * @param inicio  true quando a agenda é mostrada dentro da página inicial
+ *                (celular): não mexe no endereço e sempre abre no dia de hoje.
+ */
+export default function AgendaPage({ inicio = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const confirmar = useConfirmacao();
+  const isMobile = useIsMobile();
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   const [escopo, setEscopo] = useState(null);
   const [dentistaFiltro, setDentistaFiltro] = useState('');
   const [salaFiltro, setSalaFiltro] = useState('');
   const [dataAtual, setDataAtual] = useState(() => {
-    const p = searchParams.get('data');
+    const p = inicio ? null : searchParams.get('data');
     return p && /^\d{4}-\d{2}-\d{2}$/.test(p) ? paraData(p) : new Date();
   });
-  const [view, setView] = useState(() => visaoInicial(searchParams.get('view')));
+  const [viewEscolhida, setView] = useState(() => visaoInicial(inicio ? null : searchParams.get('view')));
+  // No celular a grade da semana não cabe: mostra sempre o dia (com a faixa da semana para trocar)
+  const view = isMobile ? 'dia' : viewEscolhida;
   const [agendamentos, setAgendamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -101,6 +192,7 @@ export default function AgendaPage() {
 
   // Mantém a data e a visão no endereço (permite abrir a agenda já no dia certo)
   useEffect(() => {
+    if (inicio) return;
     setSearchParams({ data: dataISO(dataAtual), view }, { replace: true });
   }, [dataAtual, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -212,8 +304,33 @@ export default function AgendaPage() {
     [agendamentos]
   );
 
+  const ehHojeSelecionado = dataISO(dataAtual) === hojeStr;
+  const podeFiltrarDentista = !!(escopo && !escopo.dentistaId);
+  const filtrosAtivos = (podeFiltrarDentista && dentistaFiltro ? 1 : 0) + (salaFiltro ? 1 : 0);
+  const temFiltros = podeFiltrarDentista || salas.length > 0;
+
   return (
-    <div>
+    <div className={isMobile ? 'agenda-mobile' : undefined}>
+      {isMobile ? (
+        <div className="agenda-m-topo">
+          <div style={{ minWidth: 0 }}>
+            <h1>Agenda</h1>
+            {escopo?.dentistaNome && <p className="text-sm text-muted truncate">{escopo.dentistaNome}</p>}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {temFiltros && (
+              <button className={`btn btn-icon ${filtrosAtivos ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFiltrosAbertos((a) => !a)} title="Filtros" aria-label="Filtros" aria-expanded={filtrosAbertos}>
+                <SlidersHorizontal size={18} />
+              </button>
+            )}
+            <button className="btn btn-secondary btn-icon" onClick={() => setLembretesAberto(true)}
+              title="Lembretes WhatsApp" aria-label="Lembretes WhatsApp">
+              <MessageCircle size={18} />
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="page-header">
         <div>
           <h1>Agenda</h1>
@@ -230,6 +347,7 @@ export default function AgendaPage() {
           <button className="btn btn-primary" onClick={abrirNovo}><Plus size={16} /> Novo Agendamento</button>
         </div>
       </div>
+      )}
 
       {escopo?.semVinculo && (
         <div className="card mb-4" style={{ borderLeft: '4px solid var(--warning)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -244,7 +362,55 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* Controles */}
+      {/* Controles — celular: dia em destaque + faixa da semana */}
+      {isMobile ? (
+        <div className="card agenda-m-controles">
+          <div className="agenda-m-nav">
+            <button className="btn btn-ghost btn-icon" onClick={() => navegar(-1)} aria-label="Dia anterior"><ChevronLeft size={22} /></button>
+            <div className="agenda-m-data">
+              <strong>{ehHojeSelecionado ? 'Hoje' : DIAS_SEMANA_LONGO[dataAtual.getDay()]}</strong>
+              <span>{formatDate(dataAtual)}</span>
+            </div>
+            <button className="btn btn-ghost btn-icon" onClick={() => navegar(1)} aria-label="Próximo dia"><ChevronRight size={22} /></button>
+          </div>
+          <div className="agenda-m-semana">
+            {dias.map((d) => {
+              const chave = dataISO(d);
+              const classes = ['agenda-m-dia'];
+              if (chave === dataISO(dataAtual)) classes.push('selecionado');
+              if (chave === hojeStr) classes.push('hoje');
+              return (
+                <button key={chave} type="button" className={classes.join(' ')} onClick={() => setDataAtual(d)}>
+                  <span>{DIAS_SEMANA[d.getDay()]}</span>
+                  <strong>{d.getDate()}</strong>
+                </button>
+              );
+            })}
+          </div>
+          {!ehHojeSelecionado && (
+            <button className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+              onClick={() => setDataAtual(new Date())}>
+              Voltar para hoje
+            </button>
+          )}
+          {temFiltros && filtrosAbertos && (
+            <div className="agenda-m-filtros">
+              {podeFiltrarDentista && (
+                <select className="form-control" value={dentistaFiltro} onChange={e => setDentistaFiltro(e.target.value)} aria-label="Filtrar por dentista">
+                  <option value="">Todos os dentistas</option>
+                  {dentistas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                </select>
+              )}
+              {salas.length > 0 && (
+                <select className="form-control" value={salaFiltro} onChange={e => setSalaFiltro(e.target.value)} aria-label="Filtrar por sala">
+                  <option value="">Todas as salas</option>
+                  {salas.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -287,8 +453,11 @@ export default function AgendaPage() {
           </div>
         </div>
       </div>
+      )}
 
-      {loading ? <div className="loading"><div className="spinner" /></div> : (
+      {loading ? <div className="loading"><div className="spinner" /></div> : isMobile ? (
+        <ListaDiaMobile ags={listaDia} onAbrir={abrirEdicao} onStatus={handleStatus} onNovo={abrirNovo} />
+      ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {view === 'semana' && (
             <div className="agenda-scroll">
@@ -430,7 +599,15 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* Legenda de cores */}
+      {/* Celular: botão flutuante para agendar (fica acima da barra inferior) */}
+      {isMobile && (
+        <button className="fab" onClick={abrirNovo} aria-label="Novo agendamento" title="Novo agendamento">
+          <Plus size={26} />
+        </button>
+      )}
+
+      {/* Legenda de cores (só na tela grande, onde há a grade colorida) */}
+      {!isMobile && (
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
         {Object.keys(STATUS_COLORS_BG).map((st) => (
           <span key={st} className="text-xs text-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -439,6 +616,7 @@ export default function AgendaPage() {
           </span>
         ))}
       </div>
+      )}
 
       <Modal open={modalOpen} onClose={fecharModal} title={editando ? 'Editar Agendamento' : 'Novo Agendamento'}
         footer={
