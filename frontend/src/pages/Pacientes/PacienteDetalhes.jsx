@@ -84,7 +84,7 @@ function CampoCFaz({ paciente, onSalvo }) {
   );
 }
 
-const ABA_PADRAO = 'orcamento';
+const ABA_PADRAO = 'anamnese';
 const ABAS = ['orcamento', 'prontuario', 'termos', 'anamnese', 'ortodontia', 'agenda', 'tratamentos', 'financeiro'];
 
 export default function PacienteDetalhes() {
