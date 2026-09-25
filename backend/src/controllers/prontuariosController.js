@@ -1,6 +1,5 @@
 const db = require('../database/db');
 const { montarAlertas } = require('./anamneseController');
-const { hojeISO } = require('../utils/datas');
 const { comImagens } = require('./tratamentosController');
 
 /* ================================================================== *
@@ -15,8 +14,9 @@ const { comImagens } = require('./tratamentosController');
 // Fuso da clínica (Brasil, sem horário de verão desde 2019)
 const OFFSET = '-03:00';
 
-const STATUS_ATENDIDO = ['concluido', 'em_atendimento'];
-const STATUS_FALTA = ['nao_compareceu', 'faltou'];
+// Só atendimentos CONCLUÍDOS entram no prontuário (agendados, confirmados,
+// em atendimento, faltas e cancelados ficam de fora — ver aba Histórico).
+const STATUS_ATENDIDO = ['concluido'];
 
 const ROTULO_DENTE = {
   higido: 'Hígido', cariado: 'Cariado', restaurado: 'Restaurado', ausente: 'Ausente',
@@ -43,6 +43,21 @@ const paraISO = (valor, hora) => {
   return v;
 };
 
+/** '2026-09-24T18:07:14Z' → '24/09/2026' (no fuso da clínica). */
+const dataBR = (valor, hora) => {
+  const iso = paraISO(valor, hora);
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+};
+
+/** 18 + ['M','O'] → 'Dente 18 (M, O)'; sem dente → 'Boca inteira'. */
+const alvoItem = (numeroDente, faces) => {
+  if (!numeroDente) return 'Boca inteira';
+  const lista = String(faces || '').split(',').filter(Boolean);
+  return `Dente ${numeroDente}${lista.length ? ` (${lista.join(', ')})` : ''}`;
+};
+
 const soData = (valor) => /^\d{4}-\d{2}-\d{2}$/.test(String(valor || '').trim());
 
 const pacienteExiste = (id) => db.prepare('SELECT * FROM pacientes WHERE id = ? AND ativo = 1').get(id);
@@ -55,8 +70,8 @@ exports.listarPacientes = (req, res) => {
   try {
     const busca = `%${req.query.busca || ''}%`;
     const rows = db.prepare(`SELECT p.id, p.nome, p.cpf, p.dataNascimento, p.foto, p.telefone,
-        (SELECT COUNT(*) FROM agendamentos a WHERE a.pacienteId = p.id AND a.status IN ('concluido','em_atendimento')) AS atendimentos,
-        (SELECT MAX(a.data) FROM agendamentos a WHERE a.pacienteId = p.id AND a.status IN ('concluido','em_atendimento')) AS ultimoAtendimento,
+        (SELECT COUNT(*) FROM agendamentos a WHERE a.pacienteId = p.id AND a.status = 'concluido') AS atendimentos,
+        (SELECT MAX(a.data) FROM agendamentos a WHERE a.pacienteId = p.id AND a.status = 'concluido') AS ultimoAtendimento,
         (SELECT COUNT(*) FROM tratamentos t WHERE t.pacienteId = p.id AND t.status IN ('nao_iniciado','em_andamento')) AS tratamentosAtivos,
         (SELECT COUNT(*) FROM tratamentos t WHERE t.pacienteId = p.id) AS tratamentos,
         (SELECT COUNT(*) FROM odontograma o WHERE o.pacienteId = p.id) AS marcacoesOdontograma,
@@ -87,7 +102,17 @@ exports.automatico = (req, res) => {
         FROM agendamentos a
         LEFT JOIN dentistas d ON a.dentistaId = d.id
         LEFT JOIN procedimentos pr ON a.procedimentoId = pr.id
-        WHERE a.pacienteId = ? ORDER BY a.data, a.horaInicio`).all(pacienteId);
+        WHERE a.pacienteId = ? AND a.status IN (${STATUS_ATENDIDO.map(() => '?').join(',')})
+        ORDER BY a.data, a.horaInicio`).all(pacienteId, ...STATUS_ATENDIDO);
+
+    // Procedimentos do orçamento (odontograma) marcados como realizados ("Feito")
+    let itensRealizados = [];
+    try {
+      itensRealizados = db.prepare(`SELECT id, numeroDente, faces, status, procedimento, observacoes, realizadoEm,
+          updatedAt, criadoPorNome, atualizadoPorNome
+          FROM orcamento_itens WHERE pacienteId = ? AND realizado = 1
+          ORDER BY COALESCE(realizadoEm, updatedAt), id`).all(pacienteId);
+    } catch { itensRealizados = []; }
 
     const tratamentos = db.prepare(`SELECT t.id, t.nome, t.descricao, t.valor, t.sessoes, t.sessoesRealizadas, t.status,
         t.dentistaId, t.imagens, t.createdAt, t.updatedAt, d.nome AS dentistaNome
@@ -139,25 +164,28 @@ exports.automatico = (req, res) => {
 
     /* ------------------------- linha do tempo ------------------------- */
     const eventos = [];
-    const hoje = hojeISO();
 
     agendamentos.forEach((a) => {
-      if (STATUS_ATENDIDO.includes(a.status)) {
-        eventos.push({
-          id: `ag-${a.id}`, tipo: 'atendimento', quando: paraISO(a.data, a.horaInicio),
-          titulo: a.procedimentoNome || 'Consulta',
-          subtitulo: a.status === 'em_atendimento' ? 'Em atendimento' : 'Atendimento realizado',
-          dentista: a.dentistaNome || null,
-          detalhes: [a.observacoes].filter(Boolean),
-          referenciaId: a.id,
-        });
-      } else if (STATUS_FALTA.includes(a.status)) {
-        eventos.push({
-          id: `ag-${a.id}`, tipo: 'falta', quando: paraISO(a.data, a.horaInicio),
-          titulo: 'Não compareceu', subtitulo: a.procedimentoNome || 'Consulta',
-          dentista: a.dentistaNome || null, detalhes: [a.observacoes].filter(Boolean), referenciaId: a.id,
-        });
-      }
+      eventos.push({
+        id: `ag-${a.id}`, tipo: 'atendimento', quando: paraISO(a.data, a.horaInicio),
+        titulo: a.procedimentoNome || 'Consulta',
+        subtitulo: `Atendimento concluído em ${dataBR(a.data)}`,
+        dentista: a.dentistaNome || null,
+        detalhes: [a.observacoes].filter(Boolean),
+        referenciaId: a.id,
+      });
+    });
+
+    itensRealizados.forEach((i) => {
+      const quando = i.realizadoEm || i.updatedAt;
+      eventos.push({
+        id: `pr-${i.id}`, tipo: 'procedimento', quando: paraISO(quando),
+        titulo: i.procedimento,
+        subtitulo: `${alvoItem(i.numeroDente, i.faces)} — realizado em ${dataBR(quando)}`,
+        dentista: null, responsavel: i.atualizadoPorNome || i.criadoPorNome || null,
+        detalhes: [i.observacoes].filter(Boolean),
+        referenciaId: i.id,
+      });
     });
 
     tratamentos.forEach((t) => {
@@ -267,11 +295,29 @@ exports.automatico = (req, res) => {
     eventos.sort((a, b) => (Date.parse(b.quando) || 0) - (Date.parse(a.quando) || 0));
 
     /* ----------------------------- resumo ----------------------------- */
-    const atendidos = agendamentos.filter((a) => STATUS_ATENDIDO.includes(a.status));
-    const proximos = agendamentos
-      .filter((a) => a.data >= hoje && ['agendado', 'confirmado'].includes(a.status))
-      .slice(0, 3)
-      .map((a) => ({ id: a.id, data: a.data, horaInicio: a.horaInicio, procedimentoNome: a.procedimentoNome, dentistaNome: a.dentistaNome, status: a.status }));
+    const atendidos = agendamentos; // a consulta já traz só os concluídos
+
+    // Procedimentos realizados: itens "Feito" do orçamento + atendimentos concluídos da agenda
+    const procedimentosRealizados = [
+      ...itensRealizados.map((i) => {
+        const quando = i.realizadoEm || i.updatedAt;
+        return {
+          id: `orc-${i.id}`, origem: 'orcamento', procedimento: i.procedimento,
+          alvo: alvoItem(i.numeroDente, i.faces), numeroDente: i.numeroDente,
+          faces: i.faces ? i.faces.split(',') : [],
+          realizadoEm: paraISO(quando), dataTexto: dataBR(quando),
+          responsavel: i.atualizadoPorNome || i.criadoPorNome || null, dentista: null,
+          observacoes: i.observacoes || null,
+        };
+      }),
+      ...agendamentos.map((a) => ({
+        id: `ag-${a.id}`, origem: 'agenda', procedimento: a.procedimentoNome || 'Consulta',
+        alvo: null, numeroDente: null, faces: [],
+        realizadoEm: paraISO(a.data, a.horaInicio), dataTexto: dataBR(a.data),
+        responsavel: null, dentista: a.dentistaNome || null,
+        observacoes: a.observacoes || null,
+      })),
+    ].sort((a, b) => (Date.parse(b.realizadoEm) || 0) - (Date.parse(a.realizadoEm) || 0));
 
     const dentistas = [...new Set([
       ...atendidos.map((a) => a.dentistaNome),
@@ -284,10 +330,14 @@ exports.automatico = (req, res) => {
     const porDente = {};
     odontoAtual.forEach((o) => {
       porDente[o.numeroDente] = porDente[o.numeroDente] || { numeroDente: o.numeroDente, marcacoes: [] };
+      const feito = o.procedimento ? itensRealizados.find((i) => i.numeroDente === o.numeroDente
+        && String(i.procedimento).trim().toLowerCase() === String(o.procedimento).trim().toLowerCase()
+        && (!o.face || !i.faces || i.faces.split(',').includes(o.face))) : null;
       porDente[o.numeroDente].marcacoes.push({
         face: o.face, faceRotulo: o.face ? ROTULO_FACE[o.face] || o.face : null,
         status: o.status, statusRotulo: o.status ? rotuloDente(o.status) : null,
         procedimento: o.procedimento, observacoes: o.observacoes,
+        realizadoEm: feito ? dataBR(feito.realizadoEm || feito.updatedAt) : null,
       });
     });
     const resumoOdonto = {};
@@ -314,7 +364,7 @@ exports.automatico = (req, res) => {
       anamnese,
       resumo: {
         totalAtendimentos: atendidos.length,
-        faltas: agendamentos.filter((a) => STATUS_FALTA.includes(a.status)).length,
+        totalProcedimentosRealizados: procedimentosRealizados.length,
         primeiroAtendimento: atendidos[0]?.data || null,
         ultimoAtendimento: atendidos[atendidos.length - 1]?.data || null,
         tratamentos: {
@@ -323,10 +373,10 @@ exports.automatico = (req, res) => {
           concluidos: tratamentos.filter((t) => t.status === 'concluido').length,
         },
         dentistas,
-        proximosAgendamentos: proximos,
         termosAssinados: termos.filter((t) => t.status === 'assinado').length,
         termosPendentes: termos.filter((t) => t.status === 'pendente').length,
       },
+      procedimentosRealizados,
       tratamentos: tratamentos.map((t) => ({ ...t, statusRotulo: ROTULO_TRATAMENTO[t.status] || t.status })).reverse(),
       odontograma: {
         dentes: Object.values(porDente),

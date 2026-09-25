@@ -1,26 +1,26 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Calendar, Activity, Smile, Braces, NotebookPen, ClipboardList, FileSignature, UserX,
-  Printer, Plus, AlertTriangle, RefreshCw, Pencil, Images,
+  Calendar, Activity, Smile, Braces, NotebookPen, ClipboardList, FileSignature,
+  Printer, Plus, AlertTriangle, RefreshCw, Pencil, Images, CheckCircle2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import Modal from '../common/Modal';
 import AnotacaoForm from './AnotacaoForm';
-import { formatDate, dataDoBanco, getStatusAgendamento } from '../../utils/formatters';
+import { formatDate, dataDoBanco } from '../../utils/formatters';
 import { imprimirHtml, montarHtmlProntuario } from '../../utils/impressao';
 
 /** Aparência de cada tipo de registro na linha do tempo. */
 const TIPOS = {
   atendimento: { label: 'Atendimentos', Icone: Calendar, cor: '#00959b' },
+  procedimento: { label: 'Procedimentos realizados', Icone: CheckCircle2, cor: '#16a34a' },
   tratamento: { label: 'Tratamentos', Icone: Activity, cor: '#7c3aed' },
   odontograma: { label: 'Odontograma', Icone: Smile, cor: '#0ea5e9' },
   ortodontia: { label: 'Ortodontia', Icone: Braces, cor: '#db2777' },
   anotacao: { label: 'Anotações', Icone: NotebookPen, cor: '#0f172a' },
   anamnese: { label: 'Anamnese', Icone: ClipboardList, cor: '#d97706' },
   termo: { label: 'Termos', Icone: FileSignature, cor: '#16a34a' },
-  falta: { label: 'Faltas', Icone: UserX, cor: '#dc2626' },
 };
 
 const quandoTexto = (e) => {
@@ -95,14 +95,12 @@ export default function ProntuarioAutomatico({ pacienteId }) {
   if (!dados) return <div className="empty-state"><h3>Não foi possível montar o prontuário</h3></div>;
 
   const { resumo, alertas, odontograma, tratamentos, ficha } = dados;
+  const procedimentosRealizados = dados.procedimentosRealizados || [];
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <p className="text-sm text-muted" style={{ maxWidth: 620 }}>
-          Montado automaticamente com os atendimentos, tratamentos, odontograma, ortodontia, anamnese e termos do paciente.
-          Use as anotações para registrar diagnóstico, prescrição e evolução.
-        </p>
+      
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" onClick={carregar} title="Atualizar"><RefreshCw size={14} className={loading ? 'girando' : ''} /></button>
           <button className="btn btn-secondary btn-sm" onClick={imprimir}><Printer size={14} /> Imprimir</button>
@@ -126,7 +124,8 @@ export default function ProntuarioAutomatico({ pacienteId }) {
 
       <div className="card">
         <div className="pront-resumo">
-          <div className="pront-resumo-item"><strong>{resumo.totalAtendimentos}</strong><span>atendimentos realizados</span></div>
+          <div className="pront-resumo-item"><strong>{resumo.totalAtendimentos}</strong><span>atendimento(s) concluído(s)</span></div>
+          <div className="pront-resumo-item"><strong>{resumo.totalProcedimentosRealizados ?? procedimentosRealizados.length}</strong><span>procedimento(s) realizado(s)</span></div>
           <div className="pront-resumo-item">
             <strong>{resumo.ultimoAtendimento ? formatDate(resumo.ultimoAtendimento) : '—'}</strong>
             <span>último atendimento</span>
@@ -135,29 +134,55 @@ export default function ProntuarioAutomatico({ pacienteId }) {
             <strong>{resumo.tratamentos.total}</strong>
             <span>tratamento(s) registrado(s)</span>
           </div>
-          <div className="pront-resumo-item"><strong>{resumo.faltas}</strong><span>falta(s)</span></div>
           <div className="pront-resumo-item">
             <strong>{resumo.termosAssinados}</strong>
             <span>termo(s) assinado(s){resumo.termosPendentes ? `, ${resumo.termosPendentes} pendente(s)` : ''}</span>
           </div>
         </div>
-        {(resumo.dentistas.length > 0 || resumo.proximosAgendamentos.length > 0 || ficha?.queixaPrincipal) && (
+        {(resumo.dentistas.length > 0 || ficha?.queixaPrincipal) && (
           <div style={{ display: 'grid', gap: 6, marginTop: 14, fontSize: 13 }}>
             {ficha?.queixaPrincipal && <p><strong>Queixa principal:</strong> {ficha.queixaPrincipal}</p>}
             {resumo.dentistas.length > 0 && <p><strong>Profissionais:</strong> {resumo.dentistas.join(', ')}</p>}
-            {resumo.proximosAgendamentos.length > 0 && (
-              <p>
-                <strong>Próximos agendamentos:</strong>{' '}
-                {resumo.proximosAgendamentos.map((a) => {
-                  const st = getStatusAgendamento(a.status);
-                  return (
-                    <span key={a.id} style={{ marginRight: 10, whiteSpace: 'nowrap' }}>
-                      {formatDate(a.data)} {a.horaInicio} ({a.procedimentoNome || 'Consulta'}) <span className={`badge ${st.className}`}>{st.label}</span>
-                    </span>
-                  );
-                })}
-              </p>
-            )}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">Procedimentos realizados</h3>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/pacientes/${pacienteId}?aba=orcamento`)}>Abrir orçamento</button>
+        </div>
+        {procedimentosRealizados.length === 0 ? (
+          <p className="text-sm text-muted">
+            Nenhum procedimento realizado ainda. Aparecem aqui os itens marcados como "Feito" no orçamento e os atendimentos concluídos na agenda.
+          </p>
+        ) : (
+          <div className="table-wrapper">
+            <table className="table table-cards">
+              <thead><tr><th>Procedimento</th><th>Dente</th><th>Realizado em</th><th>Origem</th><th>Profissional / registrado por</th></tr></thead>
+              <tbody>
+                {procedimentosRealizados.map((p) => (
+                  <tr key={p.id}>
+                    <td className="td-titulo">
+                      {p.procedimento}
+                      {p.observacoes && <div className="text-xs text-muted" style={{ fontWeight: 400 }}>{p.observacoes}</div>}
+                    </td>
+                    <td data-label="Dente">{p.alvo || '—'}</td>
+                    <td data-label="Realizado em">
+                      <span style={{ color: 'var(--success)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        <CheckCircle2 size={13} style={{ verticalAlign: -2, marginRight: 4 }} />Realizado em {p.dataTexto || '—'}
+                      </span>
+                    </td>
+                    <td data-label="Origem">
+                      <span className={`badge ${p.origem === 'agenda' ? 'badge-info' : 'badge-success'}`}>
+                        {p.origem === 'agenda' ? 'Agenda (concluído)' : 'Orçamento / odontograma'}
+                      </span>
+                    </td>
+                    <td data-label="Profissional">{p.dentista || p.responsavel || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -185,6 +210,11 @@ export default function ProntuarioAutomatico({ pacienteId }) {
                       <div key={i} className="text-xs">
                         {m.faceRotulo ? `${m.faceRotulo}: ` : ''}{m.statusRotulo || '—'}
                         {m.procedimento ? <span className="text-muted"> ({m.procedimento})</span> : null}
+                        {m.realizadoEm && (
+                          <div style={{ color: 'var(--success)', fontWeight: 600 }}>
+                            <CheckCircle2 size={11} style={{ verticalAlign: -1 }} /> realizado em {m.realizadoEm}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -232,7 +262,7 @@ export default function ProntuarioAutomatico({ pacienteId }) {
             <NotebookPen size={40} />
             <h3>Nada registrado ainda</h3>
             <p className="text-sm text-muted">
-              Os atendimentos concluídos na agenda, os tratamentos e as alterações no odontograma aparecem aqui automaticamente.
+              Os atendimentos concluídos na agenda, os procedimentos realizados, os tratamentos e as alterações no odontograma aparecem aqui automaticamente.
             </p>
           </div>
         ) : (
