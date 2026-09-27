@@ -15,6 +15,13 @@ const campoParaPreco = (texto) => {
   return Number.isFinite(n) && n >= 0 ? n : NaN;
 };
 
+/** Data em que o item foi marcado como feito (dd/mm/aaaa) ou null. */
+const dataRealizado = (item) => {
+  if (!item.realizadoEm) return null;
+  const d = new Date(item.realizadoEm);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('pt-BR');
+};
+
 export const rotuloAlvo = (item) => (item.numeroDente ? `Dente ${item.numeroDente}` : 'Boca inteira');
 
 function LinhaOrcamento({ item, procedimentos, onSalvar, onExcluir, onAlternarRealizado }) {
@@ -130,6 +137,9 @@ function LinhaOrcamento({ item, procedimentos, onSalvar, onExcluir, onAlternarRe
           <input type="checkbox" checked={item.realizado} onChange={() => onAlternarRealizado(item)}
             style={{ width: 18, height: 18, accentColor: 'var(--success)', cursor: 'pointer' }} />
         </label>
+        {item.realizado && dataRealizado(item) && (
+          <div className="text-xs" style={{ color: 'var(--success)', whiteSpace: 'nowrap' }}>em {dataRealizado(item)}</div>
+        )}
       </td>
     </tr>
   );

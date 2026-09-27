@@ -185,13 +185,15 @@ export const montarHtmlProntuario = (dados, { empresa = {}, tipos = null } = {})
 
     <h3>Resumo</h3>
     <ul class="lista-simples">
-      <li>Atendimentos realizados: ${esc(r.totalAtendimentos)}${r.primeiroAtendimento ? ` (de ${esc(formatDate(r.primeiroAtendimento))} a ${esc(formatDate(r.ultimoAtendimento))})` : ''}</li>
-      <li>Faltas: ${esc(r.faltas)}</li>
+      <li>Atendimentos concluídos: ${esc(r.totalAtendimentos)}${r.primeiroAtendimento ? ` (de ${esc(formatDate(r.primeiroAtendimento))} a ${esc(formatDate(r.ultimoAtendimento))})` : ''}</li>
+      <li>Procedimentos realizados: ${esc(r.totalProcedimentosRealizados ?? (dados.procedimentosRealizados || []).length)}</li>
       <li>Tratamentos registrados: ${esc(r.tratamentos?.total)}</li>
       ${r.dentistas?.length ? `<li>Profissionais: ${esc(r.dentistas.join(', '))}</li>` : ''}
     </ul>
 
     ${dados.ficha?.queixaPrincipal ? `<h3>Queixa principal</h3><p>${esc(dados.ficha.queixaPrincipal)}</p>` : ''}
+
+    ${dados.procedimentosRealizados?.length ? `<h3>Procedimentos realizados</h3><ul class="lista-simples">${dados.procedimentosRealizados.map((pr) => `<li>${esc(pr.procedimento)}${pr.alvo ? ` — ${esc(pr.alvo)}` : ''} — realizado em ${esc(pr.dataTexto || '—')}${pr.dentista ? ` (${esc(pr.dentista)})` : ''}</li>`).join('')}</ul>` : ''}
 
     ${dados.odontograma?.resumo?.length ? `<h3>Odontograma — situação atual</h3><ul class="lista-simples">${dados.odontograma.resumo.map((o) => `<li>${esc(o.rotulo)}: dentes ${esc(o.dentes.join(', '))}</li>`).join('')}</ul>` : ''}
 
