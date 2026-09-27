@@ -1,13 +1,6 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useLayoutEffect, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-/**
- * Barra de abas com scroll horizontal e indicação discreta de que há
- * mais opções para os lados (setas + fade), essencial no mobile onde
- * o usuário não enxerga que pode arrastar.
- *
- * abas: [{ id, label, icon? }]
- */
 export default function Tabs({ abas, ativa, onChange }) {
   const scrollRef = useRef(null);
   const [podeEsquerda, setPodeEsquerda] = useState(false);
@@ -20,31 +13,26 @@ export default function Tabs({ abas, ativa, onChange }) {
     setPodeDireita(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
   }, []);
 
+  useLayoutEffect(() => { atualizarSetas(); });
+
   useEffect(() => {
-    atualizarSetas();
     const el = scrollRef.current;
     if (!el) return undefined;
     el.addEventListener('scroll', atualizarSetas, { passive: true });
     window.addEventListener('resize', atualizarSetas);
+    const ro = new ResizeObserver(atualizarSetas);
+    ro.observe(el);
     return () => {
       el.removeEventListener('scroll', atualizarSetas);
       window.removeEventListener('resize', atualizarSetas);
+      ro.disconnect();
     };
-  }, [atualizarSetas, abas]);
+  }, [atualizarSetas]);
 
   const rolar = (dir) => scrollRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
 
   return (
     <div className="tabs-wrapper">
-      {podeEsquerda && (
-        <>
-          <div className="tabs-fade tabs-fade-left" />
-          <button type="button" className="tabs-arrow tabs-arrow-left" onClick={() => rolar(-1)} aria-label="Ver abas anteriores">
-            <ChevronLeft size={14} />
-          </button>
-        </>
-      )}
-
       <div className="tabs" ref={scrollRef}>
         {abas.map((t) => (
           <button
@@ -58,6 +46,15 @@ export default function Tabs({ abas, ativa, onChange }) {
           </button>
         ))}
       </div>
+
+      {podeEsquerda && (
+        <>
+          <div className="tabs-fade tabs-fade-left" />
+          <button type="button" className="tabs-arrow tabs-arrow-left" onClick={() => rolar(-1)} aria-label="Ver abas anteriores">
+            <ChevronLeft size={14} />
+          </button>
+        </>
+      )}
 
       {podeDireita && (
         <>

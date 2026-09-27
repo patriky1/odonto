@@ -179,7 +179,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* ── Tabs ── */
-/* ── Tabs ── */
 .tabs-wrapper { position: relative; margin-bottom: 24px; }
 
 .tabs {

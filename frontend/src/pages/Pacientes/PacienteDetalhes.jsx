@@ -85,7 +85,7 @@ function CampoCFaz({ paciente, onSalvo }) {
   );
 }
 
-const ABA_PADRAO = 'orcamento';
+const ABA_PADRAO = 'anamnese';
 const ABAS = ['orcamento', 'prontuario', 'termos', 'anamnese', 'ortodontia', 'agenda', 'tratamentos', 'financeiro'];
 
 export default function PacienteDetalhes() {
@@ -223,15 +223,15 @@ export default function PacienteDetalhes() {
         </div>
       </div>
 
-      {/* <Tabs abas={ABAS} ativa={aba} onChange={setAba} /> */}
+      <Tabs abas={aba_items} ativa={aba} onChange={setAba} />
 
-      <div className="tabs">
+      {/* <div className="tabs">
         {aba_items.map(({ id: aId, label, icon: Icon }) => (
           <button key={aId} className={`tab ${aba === aId ? 'active' : ''}`} onClick={() => setAba(aId)}>
             <Icon size={14} style={{ display: 'inline', marginRight: 6 }} />{label}
           </button>
         ))}
-      </div>
+      </div> */}
 
       {aba === 'orcamento' && <OrcamentoPanel pacienteId={id} />}
 
