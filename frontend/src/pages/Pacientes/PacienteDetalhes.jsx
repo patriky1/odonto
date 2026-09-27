@@ -16,6 +16,7 @@ import PacienteForm from './PacienteForm';
 import OrcamentoPanel from './OrcamentoPanel';
 import TratamentosPanel from './TratamentosPanel';
 import { formatDate, formatCPF, calcularIdade, formatCurrency, getStatusAgendamento, getStatusPagamento } from '../../utils/formatters';
+import Tabs from '../../components/common/Tabs';
 
 /**
  * Link do paciente no CFaz (antigo "iDoc", coluna linkIdoc).
@@ -221,6 +222,8 @@ export default function PacienteDetalhes() {
           <CampoCFaz paciente={paciente} onSalvo={carregarPaciente} />
         </div>
       </div>
+
+      {/* <Tabs abas={ABAS} ativa={aba} onChange={setAba} /> */}
 
       <div className="tabs">
         {aba_items.map(({ id: aId, label, icon: Icon }) => (

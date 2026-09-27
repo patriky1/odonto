@@ -30,6 +30,10 @@ exports.listar = (req, res) => {
     const registros = db.prepare(`SELECT o.*, d.nome AS dentistaNome FROM ortodontia o
                                   LEFT JOIN dentistas d ON o.dentistaId = d.id
                                   WHERE o.pacienteId = ? ORDER BY date(o.data) DESC, o.id DESC`).all(pacienteId);
+    
+    const detalhamentos = db.prepare(
+      `SELECT * FROM ortodontia_detalhamentos WHERE pacienteId = ? ORDER BY datetime(createdAt) DESC, id DESC`
+    ).all(pacienteId);
 
     const totalInvestido = registros.reduce((s, r) => s + (parseFloat(r.valor) || 0), 0);
     const emAndamento = registros.find((r) => r.tipoAparelho) || null;
@@ -37,6 +41,7 @@ exports.listar = (req, res) => {
     res.json({
       paciente,
       registros,
+      detalhamentos,
       total: registros.length,
       totalInvestido,
       aparelhoAtual: emAndamento?.tipoAparelho || null,
@@ -211,4 +216,49 @@ exports.excluir = (req, res) => {
   if (!reg) return res.status(404).json({ erro: 'Registro não encontrado', error: 'Registro não encontrado' });
   db.prepare('DELETE FROM ortodontia WHERE id = ?').run(req.params.id);
   res.json({ mensagem: 'Registro removido' });
+};
+
+/* ================================================================== *
+ * DETALHAMENTOS — observações livres, lista independente da ortodontia
+ * ================================================================== */
+
+exports.criarDetalhamento = (req, res) => {
+  try {
+    const { pacienteId } = req.params;
+    const paciente = db.prepare('SELECT id FROM pacientes WHERE id = ?').get(pacienteId);
+    if (!paciente) return res.status(404).json({ erro: 'Paciente não encontrado', error: 'Paciente não encontrado' });
+
+    const texto = req.body?.texto?.trim();
+    if (!texto) return res.status(400).json({ erro: 'Escreva alguma observação antes de salvar', error: 'Escreva alguma observação antes de salvar' });
+
+    const r = db.prepare(`INSERT INTO ortodontia_detalhamentos (pacienteId, texto, usuarioId, usuarioNome)
+      VALUES (?, ?, ?, ?)`)
+      .run(pacienteId, texto, req.usuario?.id || null, req.usuario?.nome || null);
+
+    res.status(201).json(db.prepare('SELECT * FROM ortodontia_detalhamentos WHERE id = ?').get(r.lastInsertRowid));
+  } catch (e) {
+    res.status(500).json({ erro: e.message, error: e.message });
+  }
+};
+
+exports.atualizarDetalhamento = (req, res) => {
+  try {
+    const item = db.prepare('SELECT * FROM ortodontia_detalhamentos WHERE id = ?').get(req.params.id);
+    if (!item) return res.status(404).json({ erro: 'Observação não encontrada', error: 'Observação não encontrada' });
+
+    const texto = req.body?.texto?.trim();
+    if (!texto) return res.status(400).json({ erro: 'Escreva alguma observação antes de salvar', error: 'Escreva alguma observação antes de salvar' });
+
+    db.prepare(`UPDATE ortodontia_detalhamentos SET texto=?, updatedAt=datetime('now') WHERE id=?`).run(texto, req.params.id);
+    res.json(db.prepare('SELECT * FROM ortodontia_detalhamentos WHERE id = ?').get(req.params.id));
+  } catch (e) {
+    res.status(500).json({ erro: e.message, error: e.message });
+  }
+};
+
+exports.excluirDetalhamento = (req, res) => {
+  const item = db.prepare('SELECT id FROM ortodontia_detalhamentos WHERE id = ?').get(req.params.id);
+  if (!item) return res.status(404).json({ erro: 'Observação não encontrada', error: 'Observação não encontrada' });
+  db.prepare('DELETE FROM ortodontia_detalhamentos WHERE id = ?').run(req.params.id);
+  res.json({ mensagem: 'Observação removida' });
 };
