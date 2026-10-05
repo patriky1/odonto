@@ -396,6 +396,11 @@ garantirColunas('pagamentos', {
   dentistaId: 'INTEGER',
 });
 
+// Parcelamento no cartão de crédito também sai no recibo
+garantirColunas('recibos', {
+  parcelas: 'INTEGER NOT NULL DEFAULT 1',
+});
+
 // Fotos de antes e depois do tratamento
 garantirColunas('tratamentos', {
   fotoAntes: 'TEXT',

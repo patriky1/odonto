@@ -19,7 +19,8 @@ import { formatCurrency, formatDate, getStatusPagamento, dataISO } from '../../u
 import ReciboModal from '../../components/common/ReciboModal';
 import LinkPaciente from '../../components/common/LinkPaciente';
 import RegistradoPor from '../../components/common/RegistradoPor';
-import { imprimirRecibo, rotuloForma } from '../../utils/recibo';
+import CampoParcelasCartao from '../../components/common/CampoParcelasCartao';
+import { imprimirRecibo, rotuloForma, aceitaParcelas } from '../../utils/recibo';
 
 /* ================================================================== *
  * CONSTANTES
@@ -91,7 +92,14 @@ function PagamentoForm({ pagamento, pacientes, dentistas, procedimentos = [], on
     observacoes: pagamento?.observacoes || '',
   });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // Saiu do cartão de crédito → volta para 1 parcela
+  const setForma = (e) => {
+    const forma = e.target.value;
+    setForm((f) => ({ ...f, formaPagamento: forma, parcelas: aceitaParcelas(forma) ? f.parcelas : 1 }));
+  };
   const saldo = (parseFloat(form.valor) || 0) - (parseFloat(form.valorPago) || 0);
+  // Valor passado no cartão: o já pago (quando houver) ou o total
+  const valorNoCartao = (parseFloat(form.valorPago) || 0) > 0 ? form.valorPago : form.valor;
   // Procedimento cadastrado com o mesmo nome da descrição (só como referência de valor)
   const procedimentoEscolhido = procedimentos.find(
     (p) => p.nome.trim().toLowerCase() === String(form.descricao).trim().toLowerCase()
@@ -157,7 +165,7 @@ function PagamentoForm({ pagamento, pacientes, dentistas, procedimentos = [], on
         </div>
         <div className="form-group">
           <label className="form-label">Forma de Pagamento</label>
-          <select className="form-control" value={form.formaPagamento} onChange={set('formaPagamento')}>
+          <select className="form-control" value={form.formaPagamento} onChange={setForma}>
             <option value="">Selecione</option>
             {FORMAS_PAGAMENTO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
@@ -172,6 +180,12 @@ function PagamentoForm({ pagamento, pacientes, dentistas, procedimentos = [], on
           </select>
         </div>
       </div>
+      {aceitaParcelas(form.formaPagamento) && (
+        <div className="form-row">
+          <CampoParcelasCartao formaPagamento={form.formaPagamento} valor={valorNoCartao}
+            value={form.parcelas} onChange={set('parcelas')} />
+        </div>
+      )}
       {saldo > 0 && (
         <p className="text-sm" style={{ color: 'var(--warning)', marginBottom: 12 }}>
           Saldo em aberto: <strong>{formatCurrency(saldo)}</strong>
@@ -810,7 +824,7 @@ export default function FinanceiroPage() {
                         <td data-label="Pago em" style={{ color: p.dataPagamento ? 'var(--success)' : undefined, whiteSpace: 'nowrap' }}>
                           {p.dataPagamento ? formatDate(String(p.dataPagamento).split('T')[0]) : '—'}
                         </td>
-                        <td data-label="Forma" style={{ textTransform: 'capitalize' }}>{p.formaPagamento?.replace(/_/g, ' ') || '—'}</td>
+                        <td data-label="Forma">{rotuloForma(p.formaPagamento, p.parcelas) || '—'}</td>
                         <td data-label="Status"><span className={`badge ${st.className}`}>{st.label}</span></td>
                         <td className="td-acoes">
                           <div className="actions">
@@ -1074,7 +1088,7 @@ export default function FinanceiroPage() {
                       <td data-label="Referente a">{r.descricao}</td>
                       <td data-label="Valor" style={{ fontWeight: 600 }}>{formatCurrency(r.valor)}</td>
                       <td data-label="Pagamento">{formatDate(r.dataPagamento)}</td>
-                      <td data-label="Forma">{rotuloForma(r.formaPagamento) || '—'}</td>
+                      <td data-label="Forma">{rotuloForma(r.formaPagamento, r.parcelas) || '—'}</td>
                       <td className="td-acoes">
                         <div className="actions">
                           <button className="btn btn-ghost btn-sm" title="Imprimir 2ª via"
@@ -1189,7 +1203,14 @@ export default function FinanceiroPage() {
                     <tbody>
                       {relatorio.porFormaPagamento.map((f) => (
                         <tr key={f.forma}>
-                          <td style={{ textTransform: 'capitalize' }}>{f.forma.replace(/_/g, ' ')}</td>
+                          <td>
+                            {f.forma === 'nao_informado' ? 'Não informado' : rotuloForma(f.forma)}
+                            {f.qtdParcelado > 0 && (
+                              <span className="text-xs text-muted" style={{ display: 'block' }}>
+                                {f.qtdParcelado} parcelado{f.qtdParcelado > 1 ? 's' : ''} · {formatCurrency(f.totalParcelado)}
+                              </span>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'right' }}>{f.qtd}</td>
                           <td style={{ textAlign: 'right' }}>{formatCurrency(f.total)}</td>
                         </tr>

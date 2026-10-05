@@ -22,6 +22,7 @@ const PADRAO = {
   aviso: 'Esta ação não pode ser desfeita.',
   palavra: 'EXCLUIR',
   textoBotao: 'Excluir definitivamente',
+  icone: Trash2, // ícone do botão de confirmar
 };
 
 const normalizar = (t) => String(t || '').trim().toUpperCase();
@@ -104,7 +105,7 @@ export function ConfirmProvider({ children }) {
               <div className="confirm-acoes">
                 <button type="button" className="btn btn-secondary" onClick={() => fechar(false)}>Cancelar</button>
                 <button type="submit" className="btn btn-danger" disabled={!liberado}>
-                  <Trash2 size={15} /> {pedido.textoBotao}
+                  <pedido.icone size={15} /> {pedido.textoBotao}
                 </button>
               </div>
             </form>

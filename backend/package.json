@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "backup": "node scripts/backup.js criar",
+    "backup:listar": "node scripts/backup.js listar",
+    "backup:restaurar": "node scripts/backup.js restaurar"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

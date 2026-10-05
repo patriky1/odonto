@@ -2,6 +2,7 @@ const db = require('../database/db');
 const { registrarAuditoria } = require('../utils/auditoria');
 const { lerClinica } = require('./configuracoesController');
 const { hojeISO } = require('../utils/datas');
+const { normalizarParcelas } = require('../utils/parcelas');
 
 /* ================================================================== *
  * HELPERS
@@ -102,6 +103,7 @@ exports.rascunhoDoPagamento = (req, res) => {
     valor: valorPago > 0 ? valorPago : num(pg.valor),
     descricao: pg.descricao,
     formaPagamento: pg.formaPagamento || '',
+    parcelas: normalizarParcelas(pg.formaPagamento, pg.parcelas),
     dataPagamento: (pg.dataPagamento || hojeISO()).split('T')[0],
     pagadorNome: pg.pacienteNome || '',
     pagadorCpf: pg.pacienteCpf || '',
@@ -119,7 +121,7 @@ exports.criar = (req, res) => {
   try {
     const {
       pacienteId, pagamentoId, dentistaId, valor, descricao, dataPagamento,
-      formaPagamento, pagadorNome, pagadorCpf, pagadorEndereco, observacoes,
+      formaPagamento, parcelas, pagadorNome, pagadorCpf, pagadorEndereco, observacoes,
     } = req.body;
 
     if (!pacienteId) return res.status(400).json({ erro: 'Selecione o paciente', error: 'Selecione o paciente' });
@@ -194,12 +196,13 @@ exports.criar = (req, res) => {
       try {
         const r = db.prepare(`INSERT INTO recibos
             (numero, ano, pacienteId, pagamentoId, dentistaId, valor, descricao, dataPagamento,
-             formaPagamento, pagadorNome, pagadorCpf, pagadorEndereco, observacoes,
+             formaPagamento, parcelas, pagadorNome, pagadorCpf, pagadorEndereco, observacoes,
              empresa, paciente, profissional, usuarioId, usuarioNome)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(
             numero, ano, pacienteId, pagamentoId || null, dentistaId || null,
             num(valor), descricao.trim(), data, formaPagamento || null,
+            normalizarParcelas(formaPagamento, parcelas),
             (pagadorNome || paciente.nome).trim(),
             soDigitos(pagadorCpf || paciente.cpf) || null,
             pagadorEndereco || null,

@@ -160,3 +160,4 @@ module.exports.CHAVE_SENHA_FINANCEIRA = CHAVE_SENHA_FINANCEIRA;
 module.exports.lerClinica = lerClinica;
 module.exports.garantirSenhaFinanceira = garantirSenhaFinanceira;
 module.exports.ler = ler;
+module.exports.gravar = gravar;

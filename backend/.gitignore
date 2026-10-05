@@ -5,3 +5,4 @@ uploads/
 dev.db
 dev.db-shm
 dev.db-wal
+backups/

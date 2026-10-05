@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useFinanceiro, INATIVIDADE_MIN } from '../contexts/FinanceiroContext';
 import SalasConfig from '../components/common/SalasConfig';
 import DadosEmpresaConfig from '../components/common/DadosEmpresaConfig';
+import BackupConfig from '../components/common/BackupConfig';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { Settings, Lock, User, ShieldCheck, AlertTriangle } from 'lucide-react';
@@ -156,6 +157,8 @@ export default function ConfiguracoesPage() {
       {isAdmin && <DadosEmpresaConfig />}
 
       {isAdmin && <SalasConfig />}
+
+      {isAdmin && <BackupConfig />}
 
       {/* Info sistema */}
       <div className="card mt-4">

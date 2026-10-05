@@ -1,0 +1,18 @@
+{
+  "name": "odonto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de Gestão Odontológica — comandos para o projeto inteiro (backend + frontend)",
+  "scripts": {
+    "setup": "npm --prefix backend install && npm --prefix frontend install",
+    "start:all": "node scripts/start-all.js",
+    "dev": "node scripts/start-all.js",
+    "build": "npm --prefix frontend run build",
+    "backup": "npm --prefix backend run backup",
+    "backup:listar": "npm --prefix backend run backup:listar",
+    "backup:restaurar": "npm --prefix backend run backup:restaurar --"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

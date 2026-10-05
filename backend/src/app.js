@@ -24,6 +24,7 @@ const recibosRoutes = require('./routes/recibos');
 const auditoriaRoutes = require('./routes/auditoria');
 const termosRoutes = require('./routes/termos');
 const orcamentoRoutes = require('./routes/orcamento');
+const backupsRoutes = require('./routes/backups');
 const { ocultarAuditoriaParaNaoAdmin } = require('./utils/auditoria');
 
 const errorHandler = require('./middlewares/errorHandler');
@@ -68,6 +69,7 @@ app.use('/api/recibos', recibosRoutes);
 app.use('/api/auditoria', auditoriaRoutes);
 app.use('/api/termos', termosRoutes);
 app.use('/api/orcamento', orcamentoRoutes);
+app.use('/api/backups', backupsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

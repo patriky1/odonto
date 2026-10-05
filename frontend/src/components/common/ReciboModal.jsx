@@ -4,9 +4,10 @@ import { Printer, MessageCircle, CheckCircle2, AlertTriangle, FileText } from 'l
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 import Modal from './Modal';
+import CampoParcelasCartao from './CampoParcelasCartao';
 import { formatCurrency, dataISO, numeroWhatsApp } from '../../utils/formatters';
 import {
-  imprimirRecibo, montarHtmlRecibo, textoReciboWhatsApp, valorPorExtenso,
+  imprimirRecibo, montarHtmlRecibo, textoReciboWhatsApp, valorPorExtenso, aceitaParcelas,
 } from '../../utils/recibo';
 
 const FORMAS_PAGAMENTO = [
@@ -22,7 +23,7 @@ const FORMAS_PAGAMENTO = [
 
 const FORM_VAZIO = {
   pacienteId: '', pagamentoId: '', dentistaId: '', valor: '', descricao: '',
-  dataPagamento: dataISO(), formaPagamento: '', pagadorNome: '', pagadorCpf: '',
+  dataPagamento: dataISO(), formaPagamento: '', parcelas: 1, pagadorNome: '', pagadorCpf: '',
   pagadorEndereco: '', observacoes: '',
 };
 
@@ -45,6 +46,11 @@ export default function ReciboModal({
   const [duasVias, setDuasVias] = useState(true);
 
   const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+  // Saiu do cartão de crédito → volta para 1 parcela
+  const setForma = (e) => {
+    const forma = e.target.value;
+    setForm((f) => ({ ...f, formaPagamento: forma, parcelas: aceitaParcelas(forma) ? f.parcelas : 1 }));
+  };
 
   /* ------------------------ abertura do modal ----------------------- */
 
@@ -233,7 +239,7 @@ export default function ReciboModal({
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Forma de pagamento</label>
-              <select className="form-control" value={form.formaPagamento} onChange={set('formaPagamento')}>
+              <select className="form-control" value={form.formaPagamento} onChange={setForma}>
                 <option value="">Não informar</option>
                 {FORMAS_PAGAMENTO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
               </select>
@@ -246,6 +252,12 @@ export default function ReciboModal({
               </select>
             </div>
           </div>
+          {aceitaParcelas(form.formaPagamento) && (
+            <div className="form-row">
+              <CampoParcelasCartao formaPagamento={form.formaPagamento} valor={form.valor}
+                value={form.parcelas} onChange={set('parcelas')} />
+            </div>
+          )}
 
           <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.5px', margin: '18px 0 8px' }}>
             Quem pagou

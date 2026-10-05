@@ -7,6 +7,7 @@ const db = require('../database/db');
 // Datas no fuso da clínica (antes usava UTC e o "hoje" virava às 21h)
 const { hojeISO, mesISO } = require('../utils/datas');
 const { autor, registrarAuditoria } = require('../utils/auditoria');
+const { normalizarParcelas, formaComParcelas } = require('../utils/parcelas');
 
 const brl = (v) => `R$ ${num(v).toFixed(2).replace('.', ',')}`;
 
@@ -25,6 +26,9 @@ const filtroDentista = (dentistaId, alias = '') => (dentistaId ? ` AND ${alias}d
 const dentistaExiste = (id) => !id || Boolean(db.prepare('SELECT id FROM dentistas WHERE id = ?').get(id));
 
 const nomePaciente = (id) => db.prepare('SELECT nome FROM pacientes WHERE id = ?').get(id)?.nome || `Paciente #${id}`;
+
+/** Trecho da auditoria: " no cartão em 10x" (vazio quando à vista). */
+const textoParcelas = (pg) => (pg.parcelas > 1 ? ` no cartão em ${pg.parcelas}x` : '');
 
 /** Primeiro e último dia do mês informado (YYYY-MM). */
 const limitesDoMes = (ym) => {
@@ -184,6 +188,9 @@ exports.criarPagamento = (req, res) => {
       return res.status(404).json({ erro: 'Dentista não encontrado', error: 'Dentista não encontrado' });
     }
 
+    // Parcelas só valem para cartão de crédito (1 a 12)
+    const qtdParcelas = normalizarParcelas(formaPagamento, parcelas);
+
     const quem = autor(req);
     const r = db.prepare(`INSERT INTO pagamentos
         (pacienteId, descricao, valor, valorPago, dataVencimento, dataPagamento, formaPagamento, parcelas, status, observacoes, dentistaId,
@@ -191,12 +198,12 @@ exports.criarPagamento = (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(pacienteId, descricao.trim(), num(valor), num(valorPago), dataVencimento || null,
         dataPagamento || (st === 'pago' ? hojeISO() : null), formaPagamento || null,
-        parseInt(parcelas) || 1, st, observacoes || null, dentistaId || null, quem.id, quem.nome);
+        qtdParcelas, st, observacoes || null, dentistaId || null, quem.id, quem.nome);
 
     const criado = db.prepare('SELECT * FROM pagamentos WHERE id = ?').get(r.lastInsertRowid);
     registrarAuditoria(req, {
       entidade: 'pagamento', entidadeId: criado.id, acao: 'criou',
-      descricao: `${criado.descricao} — ${nomePaciente(criado.pacienteId)} (${brl(criado.valor)})`,
+      descricao: `${criado.descricao} — ${nomePaciente(criado.pacienteId)} (${brl(criado.valor)}${textoParcelas(criado)})`,
       pacienteId: criado.pacienteId, dentistaId: criado.dentistaId,
     });
     res.status(201).json(criado);
@@ -227,6 +234,9 @@ exports.atualizarPagamento = (req, res) => {
       dentistaId: b.dentistaId !== undefined ? (b.dentistaId || null) : pg.dentistaId,
     };
 
+    // Trocou para outra forma de pagamento → volta para 1 parcela
+    novo.parcelas = normalizarParcelas(novo.formaPagamento, novo.parcelas);
+
     if (novo.status === 'pago' && !novo.dataPagamento) novo.dataPagamento = hojeISO();
     if (novo.status === 'pago' && num(novo.valorPago) === 0) novo.valorPago = novo.valor;
 
@@ -242,6 +252,7 @@ exports.atualizarPagamento = (req, res) => {
     if (num(pg.valor) !== num(novo.valor)) mudancas.push(`valor ${brl(pg.valor)} → ${brl(novo.valor)}`);
     if (num(pg.valorPago) !== num(novo.valorPago)) mudancas.push(`pago ${brl(pg.valorPago)} → ${brl(novo.valorPago)}`);
     if (pg.status !== novo.status) mudancas.push(`status ${pg.status} → ${novo.status}`);
+    if ((pg.parcelas || 1) !== novo.parcelas) mudancas.push(`parcelas ${pg.parcelas || 1}x → ${novo.parcelas}x`);
     registrarAuditoria(req, {
       entidade: 'pagamento', entidadeId: pg.id, acao: 'editou',
       descricao: `${novo.descricao} — ${nomePaciente(novo.pacienteId)}${mudancas.length ? ` (${mudancas.join('; ')})` : ''}`,
@@ -258,12 +269,14 @@ exports.receberPagamento = (req, res) => {
   try {
     const pg = db.prepare('SELECT * FROM pagamentos WHERE id = ?').get(req.params.id);
     if (!pg) return res.status(404).json({ erro: 'Pagamento não encontrado', error: 'Pagamento não encontrado' });
-    const { formaPagamento, dataPagamento, valorPago } = req.body || {};
+    const { formaPagamento, dataPagamento, valorPago, parcelas } = req.body || {};
     const quem = autor(req);
     const recebido = valorPago !== undefined ? num(valorPago) : num(pg.valor);
-    db.prepare(`UPDATE pagamentos SET status='pago', valorPago=?, dataPagamento=?, formaPagamento=COALESCE(?, formaPagamento),
+    const forma = formaPagamento || pg.formaPagamento;
+    const qtdParcelas = normalizarParcelas(forma, parcelas ?? pg.parcelas);
+    db.prepare(`UPDATE pagamentos SET status='pago', valorPago=?, dataPagamento=?, formaPagamento=?, parcelas=?,
                 atualizadoPorId=?, atualizadoPorNome=?, updatedAt=datetime('now') WHERE id=?`)
-      .run(recebido, dataPagamento || hojeISO(), formaPagamento || null, quem.id, quem.nome, req.params.id);
+      .run(recebido, dataPagamento || hojeISO(), forma || null, qtdParcelas, quem.id, quem.nome, req.params.id);
     registrarAuditoria(req, {
       entidade: 'pagamento', entidadeId: pg.id, acao: 'deu baixa',
       descricao: `${pg.descricao} — ${nomePaciente(pg.pacienteId)} (recebido ${brl(recebido)})`,
@@ -695,7 +708,9 @@ exports.relatorio = (req, res) => {
     }));
 
     const porFormaPagamento = db.prepare(
-      `SELECT COALESCE(formaPagamento, 'nao_informado') AS forma, SUM(valorPago) AS total, COUNT(*) AS qtd
+      `SELECT COALESCE(formaPagamento, 'nao_informado') AS forma, SUM(valorPago) AS total, COUNT(*) AS qtd,
+              SUM(CASE WHEN parcelas > 1 THEN 1 ELSE 0 END) AS qtdParcelado,
+              SUM(CASE WHEN parcelas > 1 THEN valorPago ELSE 0 END) AS totalParcelado
        FROM pagamentos pg WHERE status = 'pago' AND date(COALESCE(dataPagamento, createdAt)) BETWEEN date(?) AND date(?)${fPg}
        GROUP BY COALESCE(formaPagamento, 'nao_informado') ORDER BY total DESC`
     ).all(inicio, fim);
@@ -763,7 +778,7 @@ exports.exportarCSV = (req, res) => {
                 WHERE pg.status='pago' AND date(COALESCE(pg.dataPagamento, pg.createdAt)) BETWEEN date(?) AND date(?)
                 ${filtroDentista(dentistaId, 'pg.')}`)
       .all(inicio, fim)
-      .forEach((p) => linhas.push([p.dataPagamento || '', 'Recebimento', p.descricao, 'pacientes', p.pacienteNome || '', p.dentistaNome || '', p.formaPagamento || '', p.status, num(p.valorPago).toFixed(2)]));
+      .forEach((p) => linhas.push([p.dataPagamento || '', 'Recebimento', p.descricao, 'pacientes', p.pacienteNome || '', p.dentistaNome || '', formaComParcelas(p.formaPagamento, p.parcelas), p.status, num(p.valorPago).toFixed(2)]));
 
     db.prepare(`SELECT r.*, d.nome AS dentistaNome FROM receitas r LEFT JOIN dentistas d ON r.dentistaId = d.id
                 WHERE date(r.data) BETWEEN date(?) AND date(?)${filtroDentista(dentistaId, 'r.')}`).all(inicio, fim)

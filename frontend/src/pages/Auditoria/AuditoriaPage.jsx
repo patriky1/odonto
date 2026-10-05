@@ -16,6 +16,7 @@ const TIPOS = [
   { value: 'despesa', label: 'Gastos' },
   { value: 'recibo', label: 'Recibos' },
   { value: 'termo', label: 'Termos de consentimento' },
+  { value: 'backup', label: 'Backups' },
 ];
 
 const ROTULO_TIPO = Object.fromEntries(TIPOS.filter((t) => t.value).map((t) => [t.value, t.label]));
@@ -30,6 +31,7 @@ const COR_ACAO = {
   excluiu: 'badge-danger',
   cancelou: 'badge-danger',
   revogou: 'badge-orange',
+  restaurou: 'badge-orange',
 };
 
 const ROTULO_PERFIL = { admin: 'Admin', dentista: 'Dentista', recepcionista: 'Recepção' };

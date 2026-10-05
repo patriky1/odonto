@@ -91,7 +91,50 @@ const FORMAS = {
   parcelado: 'Parcelado',
 };
 
-export const rotuloForma = (f) => FORMAS[f] || (f ? String(f).replace(/_/g, ' ') : '');
+/* ------------------- parcelamento no cartão ------------------- */
+
+// Mesmo limite de backend/src/utils/parcelas.js
+export const MAX_PARCELAS_CARTAO = 12;
+
+/** Só o cartão de crédito aceita parcelas. */
+export const aceitaParcelas = (forma) => forma === 'cartao_credito';
+
+const qtdParcelas = (forma, parcelas) => (aceitaParcelas(forma) ? Math.max(1, parseInt(parcelas, 10) || 1) : 1);
+
+/**
+ * Divide o valor em parcelas (em reais). A diferença de centavos fica na
+ * 1ª parcela, como fazem as maquininhas: 100 / 3 = 33,34 + 33,33 + 33,33.
+ */
+export const dividirParcelas = (valor, parcelas) => {
+  const total = Math.round((Number(valor) || 0) * 100);
+  const n = Math.max(1, parseInt(parcelas, 10) || 1);
+  const base = Math.floor(total / n);
+  const resto = total - base * n;
+  return Array.from({ length: n }, (_, i) => (base + (i === 0 ? resto : 0)) / 100);
+};
+
+/** "10x de R$ 150,00" ou "1x de R$ 33,34 + 2x de R$ 33,33". Vazio quando à vista. */
+export const resumoParcelas = (valor, parcelas) => {
+  const n = Math.max(1, parseInt(parcelas, 10) || 1);
+  if (n <= 1) return '';
+  const [primeira, demais] = dividirParcelas(valor, n);
+  if (primeira === demais) return `${n}x de ${formatCurrency(demais)}`;
+  return `1x de ${formatCurrency(primeira)} + ${n - 1}x de ${formatCurrency(demais)}`;
+};
+
+/** Rótulo curto para tabelas: "Cartão de Crédito (10x)". */
+export const rotuloForma = (f, parcelas = 1) => {
+  const rotulo = FORMAS[f] || (f ? String(f).replace(/_/g, ' ') : '');
+  const n = qtdParcelas(f, parcelas);
+  return n > 1 ? `${rotulo} (${n}x)` : rotulo;
+};
+
+/** Rótulo completo para o recibo: "Cartão de Crédito em 10x de R$ 150,00". */
+export const descricaoForma = (f, parcelas, valor) => {
+  const rotulo = FORMAS[f] || (f ? String(f).replace(/_/g, ' ') : '');
+  const n = qtdParcelas(f, parcelas);
+  return n > 1 ? `${rotulo} em ${resumoParcelas(valor, n)}` : rotulo;
+};
 
 export const formatarDocumento = (doc, tipo) => {
   const d = String(doc || '').replace(/\D/g, '');
@@ -151,7 +194,7 @@ const umaVia = (r, rotuloVia) => {
         r.paciente?.nome && r.paciente.nome !== r.pagadorNome
           ? `, em atendimento ao paciente <strong>${esc(r.paciente.nome)}</strong>`
           : ''
-      }${r.formaPagamento ? `, pago em ${esc(rotuloForma(r.formaPagamento))}` : ''},
+      }${r.formaPagamento ? `, pago em ${esc(descricaoForma(r.formaPagamento, r.parcelas, r.valor))}` : ''},
       dando plena quitação pelo valor recebido.
     </p>
 
@@ -163,7 +206,7 @@ const umaVia = (r, rotuloVia) => {
         </tr>
         <tr>
           <td><span>Profissional responsável</span>${esc(prof.nome || e.responsavel || '—')}${prof.cro ? ` — CRO ${esc(prof.cro)}` : ''}</td>
-          <td><span>Forma de pagamento</span>${esc(rotuloForma(r.formaPagamento) || '—')}</td>
+          <td><span>Forma de pagamento</span>${esc(descricaoForma(r.formaPagamento, r.parcelas, r.valor) || '—')}</td>
         </tr>
       </tbody>
     </table>
@@ -295,7 +338,7 @@ export const textoReciboWhatsApp = (recibo) => {
     `Recebemos de ${recibo.pagadorNome} o valor de ${formatCurrency(recibo.valor)}`,
     `Referente a: ${recibo.descricao}`,
     `Data do pagamento: ${formatDate(recibo.dataPagamento)}`,
-    rotuloForma(recibo.formaPagamento) ? `Forma: ${rotuloForma(recibo.formaPagamento)}` : '',
+    recibo.formaPagamento ? `Forma: ${descricaoForma(recibo.formaPagamento, recibo.parcelas, recibo.valor)}` : '',
     '',
     'Obrigado pela confiança!',
   ].filter(Boolean).join('\n');

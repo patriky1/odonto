@@ -8,6 +8,7 @@ import FotoPacienteModal, { AvatarPaciente } from '../../components/common/FotoP
 import AnamneseForm from './AnamneseForm';
 import OrtodontiaPanel from './OrtodontiaPanel';
 import ReciboModal from '../../components/common/ReciboModal';
+import { rotuloForma } from '../../utils/recibo';
 import TermosPanel from './TermosPanel';
 import RegistradoPor from '../../components/common/RegistradoPor';
 import ProntuarioAutomatico from '../../components/prontuario/ProntuarioAutomatico';
@@ -289,7 +290,7 @@ export default function PacienteDetalhes() {
           <h3 className="card-title mb-4">Histórico Financeiro</h3>
           <div className="table-wrapper">
             <table className="table table-cards">
-              <thead><tr><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Status</th><th>Recibo</th></tr></thead>
+              <thead><tr><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Pagamento</th><th>Forma</th><th>Status</th><th>Recibo</th></tr></thead>
               <tbody>
                 {(paciente.pagamentos || []).map(pg => {
                   const st = getStatusPagamento(pg.status);
@@ -299,6 +300,7 @@ export default function PacienteDetalhes() {
                       <td data-label="Valor">{formatCurrency(pg.valor)}</td>
                       <td data-label="Vencimento">{formatDate(pg.dataVencimento)}</td>
                       <td data-label="Pagamento">{formatDate(pg.dataPagamento)}</td>
+                      <td data-label="Forma">{rotuloForma(pg.formaPagamento, pg.parcelas) || '—'}</td>
                       <td data-label="Status"><span className={`badge ${st.className}`}>{st.label}</span></td>
                       <td className="td-acoes">
                         <button className="btn btn-ghost btn-sm" title="Emitir recibo deste pagamento"
@@ -307,7 +309,7 @@ export default function PacienteDetalhes() {
                     </tr>
                   );
                 })}
-                {(paciente.pagamentos || []).length === 0 && <tr><td colSpan={6}><div className="empty-state"><p>Nenhum pagamento registrado</p></div></td></tr>}
+                {(paciente.pagamentos || []).length === 0 && <tr><td colSpan={7}><div className="empty-state"><p>Nenhum pagamento registrado</p></div></td></tr>}
               </tbody>
             </table>
           </div>
