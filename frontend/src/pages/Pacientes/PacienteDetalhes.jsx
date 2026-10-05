@@ -17,6 +17,7 @@ import PacienteForm from './PacienteForm';
 import OrcamentoPanel from './OrcamentoPanel';
 import TratamentosPanel from './TratamentosPanel';
 import { formatDate, formatCPF, calcularIdade, formatCurrency, getStatusAgendamento, getStatusPagamento } from '../../utils/formatters';
+import Tabs from '../../components/common/Tabs';
 
 /**
  * Link do paciente no CFaz (antigo "iDoc", coluna linkIdoc).
@@ -223,13 +224,15 @@ export default function PacienteDetalhes() {
         </div>
       </div>
 
-      <div className="tabs">
+      <Tabs abas={aba_items} ativa={aba} onChange={setAba} />
+
+      {/* <div className="tabs">
         {aba_items.map(({ id: aId, label, icon: Icon }) => (
           <button key={aId} className={`tab ${aba === aId ? 'active' : ''}`} onClick={() => setAba(aId)}>
             <Icon size={14} style={{ display: 'inline', marginRight: 6 }} />{label}
           </button>
         ))}
-      </div>
+      </div> */}
 
       {aba === 'orcamento' && <OrcamentoPanel pacienteId={id} />}
 

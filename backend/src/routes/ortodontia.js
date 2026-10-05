@@ -8,6 +8,9 @@ router.get('/opcoes', ctrl.opcoes);
 router.get('/paciente/:pacienteId', ctrl.listar);
 router.post('/paciente/:pacienteId', ctrl.criar);
 router.put('/:id', ctrl.atualizar);
+router.post('/detalhamentos/paciente/:pacienteId', ctrl.criarDetalhamento);
+router.put('/detalhamentos/:id', ctrl.atualizarDetalhamento);
+router.delete('/detalhamentos/:id', ctrl.excluirDetalhamento);
 router.delete('/:id', ctrl.excluir);
 
 module.exports = router;

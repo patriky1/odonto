@@ -271,6 +271,17 @@ db.exec(`
     updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  -- Observações/detalhamento livre da ortodontia (lista independente, cresce ao longo do tratamento)
+  CREATE TABLE IF NOT EXISTS ortodontia_detalhamentos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pacienteId INTEGER NOT NULL REFERENCES pacientes(id),
+    texto TEXT NOT NULL,
+    usuarioId INTEGER,
+    usuarioNome TEXT,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+    updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   -- Configurações gerais do sistema (chave/valor) — usada pela senha do financeiro
   CREATE TABLE IF NOT EXISTS configuracoes (
     chave TEXT PRIMARY KEY,
@@ -551,6 +562,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_odonto_hist_paciente    ON odontograma_historico(pacienteId);
   CREATE INDEX IF NOT EXISTS idx_notificacoes_usuario    ON notificacoes(usuarioId);
   CREATE INDEX IF NOT EXISTS idx_dentistas_usuario       ON dentistas(usuarioId);
+  CREATE INDEX IF NOT EXISTS idx_ortodontia_detalhamentos_paciente ON ortodontia_detalhamentos(pacienteId);
   CREATE INDEX IF NOT EXISTS idx_ortodontia_paciente     ON ortodontia(pacienteId);
   CREATE INDEX IF NOT EXISTS idx_ortodontia_data         ON ortodontia(data);
   CREATE INDEX IF NOT EXISTS idx_pagamentos_dentista     ON pagamentos(dentistaId);
